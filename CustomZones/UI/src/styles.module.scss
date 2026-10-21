@@ -1,0 +1,805 @@
+// CustomZones UI - floating window styled with the game's own design
+// tokens (same CSS variables FindIt uses: --panelColorNormal, --panelBlur,
+// --accentColorNormal, --panelRadius, ...). All sizes in rem: the game
+// scales 1rem ~ 1px at 1080p.
+
+// ---------------------------------------------------------------- toolbar
+.toolbarButton {
+  width: 36rem;
+  height: 36rem;
+  margin-left: 6rem;
+}
+
+.toolbarButtonActive {
+  composes: toolbarButton;
+  background-color: var(--accentColorNormal);
+  border-radius: 4rem;
+}
+
+.toolbarButtonIcon {
+  width: 24rem;
+  height: 24rem;
+}
+
+// Contextual button shown in the zone tool's left options panel area while
+// the palette painter is active. Anchored to the left edge, vertically
+// centred, so it sits next to the vanilla Theme/Package/Tools options.
+.toolPanelButton {
+  position: absolute;
+  left: 6rem;
+  bottom: 220rem;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 6rem 12rem 6rem 8rem;
+  background-color: var(--panelColorNormal);
+  border-radius: var(--panelRadius, 4rem);
+  color: var(--textColor);
+}
+
+.toolPanelButtonActive {
+  composes: toolPanelButton;
+  background-color: var(--accentColorNormal);
+}
+
+.toolPanelButtonIcon {
+  width: 28rem;
+  height: 28rem;
+  margin-right: 8rem;
+}
+
+.toolPanelButtonLabel {
+  font-size: 14rem;
+  white-space: nowrap;
+}
+
+// ---------------------------------------------------------------- window
+.window {
+  position: absolute;
+  top: 110rem;
+  left: 60rem;
+  width: 860rem;
+  height: 660rem;
+  min-width: 720rem;
+  min-height: 520rem;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--panelColorNormal);
+  backdrop-filter: var(--panelBlur);
+  border-radius: var(--panelRadius);
+  box-shadow: 0 4rem 16rem rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  height: 38rem;
+  padding: 0 6rem 0 14rem;
+  background: linear-gradient(
+    to right,
+    var(--panelGradientStart),
+    var(--panelGradientEnd)
+  );
+  cursor: move;
+}
+
+.headerIcon {
+  width: 22rem;
+  height: 22rem;
+  margin-right: 8rem;
+}
+
+.headerTitle {
+  flex: 1;
+  font-size: 15rem;
+  font-weight: bold;
+  color: var(--textColor);
+  text-transform: uppercase;
+  letter-spacing: 1rem;
+}
+
+.closeButton {
+  width: 30rem;
+  height: 30rem;
+
+  img {
+    width: 18rem;
+    height: 18rem;
+  }
+}
+
+.body {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+}
+
+// ---------------------------------------------------------------- sidebar
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  width: 230rem;
+  padding: 8rem;
+  background-color: var(--panelColorDark);
+  border-right: 1rem solid var(--menuControlBorder);
+}
+
+.newPaletteButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32rem;
+  margin-bottom: 8rem;
+  border-radius: 4rem;
+  background-color: var(--accentColorNormal);
+
+  img {
+    width: 16rem;
+    height: 16rem;
+    margin-right: 6rem;
+  }
+
+  span {
+    font-size: 13rem;
+    color: var(--textColor);
+  }
+}
+
+.paletteList {
+  flex: 1;
+}
+
+.paletteItem {
+  position: relative;
+  padding: 8rem 10rem;
+  margin-bottom: 6rem;
+  border-radius: 4rem;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1rem solid transparent;
+  cursor: pointer;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+}
+
+.paletteItemSelected {
+  composes: paletteItem;
+  border-color: var(--accentColorNormal);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.createForm {
+  display: flex;
+  flex-direction: column;
+  padding: 8rem;
+  margin-bottom: 8rem;
+  background-color: rgba(255, 255, 255, 0.06);
+  border-radius: 4rem;
+}
+
+.createLabel {
+  font-size: 12rem;
+  color: var(--textColorDim);
+  margin-bottom: 6rem;
+}
+
+.createOption {
+  justify-content: flex-start;
+  padding: 6rem 10rem;
+  margin-bottom: 4rem;
+  background-color: rgba(255, 255, 255, 0.08);
+  border-radius: 4rem;
+  color: var(--textColor);
+}
+
+.createCancel {
+  justify-content: center;
+  padding: 4rem;
+  margin-top: 2rem;
+  color: var(--textColorDim);
+}
+
+.paletteSelect {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  padding: 0;
+  background-color: transparent;
+}
+
+.paletteName {
+  font-size: 14rem;
+  color: var(--textColor);
+  margin-bottom: 2rem;
+}
+
+.paletteMeta {
+  font-size: 11rem;
+  color: var(--textColorDim);
+}
+
+.paletteActions {
+  display: flex;
+  flex-direction: row;
+  margin-top: 6rem;
+
+  button {
+    width: 24rem;
+    height: 24rem;
+    margin-right: 4rem;
+  }
+
+  img {
+    width: 14rem;
+    height: 14rem;
+  }
+}
+
+.renameInput {
+  width: 100%;
+  height: 26rem;
+  padding: 0 6rem;
+  font-size: 13rem;
+  color: var(--textColor);
+  background-color: rgba(0, 0, 0, 0.4);
+  border: 1rem solid var(--accentColorNormal);
+  border-radius: 3rem;
+}
+
+// ---------------------------------------------------------------- main
+.main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.emptyState {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30rem;
+  font-size: 14rem;
+  color: var(--textColorDim);
+  text-align: center;
+}
+
+// ---------------------------------------------------------------- editor
+.editor {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 8rem 10rem;
+}
+
+// Modern FindIt-style filter block: a bordered card holding the search, the
+// width/depth/level steppers and the asset-pack icon row.
+.filterPanel {
+  display: flex;
+  flex-direction: column;
+  padding: 8rem 10rem;
+  margin-bottom: 8rem;
+  background-color: rgba(0, 0, 0, 0.22);
+  border: 1rem solid var(--menuControlBorder);
+  border-radius: 6rem;
+}
+
+.filterHeader {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 8rem;
+}
+
+.filterHeaderIcon {
+  width: 16rem;
+  height: 16rem;
+  margin-right: 6rem;
+  opacity: 0.85;
+}
+
+.filterHeaderTitle {
+  flex: 1;
+  font-size: 12rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1rem;
+  color: var(--textColorDim);
+}
+
+.iconBtn {
+  width: 26rem;
+  height: 26rem;
+  border-radius: 4rem;
+
+  img {
+    width: 16rem;
+    height: 16rem;
+  }
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+  }
+}
+
+// ----- search -----
+.searchWrap {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 30rem;
+  padding: 0 6rem;
+  margin-bottom: 8rem;
+  background-color: rgba(0, 0, 0, 0.4);
+  border: 1rem solid var(--menuControlBorder);
+  border-radius: 6rem;
+
+  &:focus-within {
+    border-color: var(--accentColorNormal);
+  }
+}
+
+.searchIcon {
+  width: 16rem;
+  height: 16rem;
+  margin-right: 6rem;
+  opacity: 0.6;
+}
+
+.searchInput {
+  flex: 1;
+  height: 100%;
+  font-size: 13rem;
+  color: var(--textColor);
+  background-color: transparent;
+  border: none;
+}
+
+.searchClear {
+  width: 22rem;
+  height: 22rem;
+
+  img {
+    width: 14rem;
+    height: 14rem;
+    opacity: 0.7;
+  }
+}
+
+// ----- width / depth / level steppers -----
+.stepperRow {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  margin-bottom: 6rem;
+}
+
+.stepper {
+  display: flex;
+  flex-direction: column;
+  margin-right: 10rem;
+  margin-bottom: 4rem;
+}
+
+.stepperLabel {
+  font-size: 11rem;
+  color: var(--textColorDim);
+  margin-bottom: 3rem;
+}
+
+.stepperControl {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 28rem;
+  background-color: rgba(0, 0, 0, 0.35);
+  border-radius: 5rem;
+  overflow: hidden;
+}
+
+.stepperBtn {
+  width: 26rem;
+  height: 28rem;
+
+  img {
+    width: 12rem;
+    height: 12rem;
+  }
+
+  &:hover {
+    background-color: var(--accentColorNormal);
+  }
+}
+
+.stepperBtnDim {
+  composes: stepperBtn;
+
+  img {
+    opacity: 0.25;
+  }
+
+  &:hover {
+    background-color: transparent;
+  }
+}
+
+.stepperValue {
+  min-width: 46rem;
+  text-align: center;
+  font-size: 12rem;
+  color: var(--textColor);
+}
+
+// ----- icon filter row (asset packs) -----
+.iconFilterRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 6rem;
+}
+
+.iconFilterLabel {
+  width: 60rem;
+  font-size: 11rem;
+  color: var(--textColorDim);
+}
+
+.chipGroup {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  padding: 2rem;
+  background-color: rgba(0, 0, 0, 0.25);
+  border-radius: 5rem;
+}
+
+.packChip {
+  width: 30rem;
+  height: 30rem;
+  border-radius: 4rem;
+
+  img {
+    width: 20rem;
+    height: 20rem;
+  }
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+  }
+}
+
+.packChipActive {
+  composes: packChip;
+  background-color: var(--accentColorNormal);
+}
+
+// ----- selection actions -----
+.actionRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-top: 2rem;
+}
+
+.actionChip {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 28rem;
+  padding: 0 10rem;
+  margin-right: 6rem;
+  font-size: 12rem;
+  color: var(--textColor);
+  background-color: rgba(255, 255, 255, 0.06);
+  border-radius: 5rem;
+
+  img {
+    width: 15rem;
+    height: 15rem;
+    margin-right: 5rem;
+  }
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+  }
+}
+
+.actionChipActive {
+  composes: actionChip;
+  background-color: var(--accentColorNormal);
+}
+
+.resultCount {
+  margin-left: auto;
+  font-size: 12rem;
+  color: var(--textColorDim);
+}
+
+// ------------------------------------------------- icon generation progress
+.iconProgress {
+  display: flex;
+  flex-direction: column;
+  padding: 6rem 10rem 8rem 10rem;
+  margin-bottom: 8rem;
+  background-color: rgba(0, 0, 0, 0.25);
+  border: 1rem solid var(--menuControlBorder);
+  border-radius: 6rem;
+}
+
+.iconProgressLabel {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 5rem;
+  font-size: 12rem;
+  color: var(--textColor);
+}
+
+.iconProgressCount {
+  font-size: 11rem;
+  color: var(--textColorDim);
+}
+
+.iconProgressTrack {
+  height: 6rem;
+  background-color: rgba(0, 0, 0, 0.45);
+  border-radius: 3rem;
+  overflow: hidden;
+}
+
+.iconProgressFill {
+  height: 100%;
+  background-color: var(--accentColorNormal);
+  border-radius: 3rem;
+}
+
+// ------------------------------------------------------- virtualized grid
+.gridArea {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+}
+
+.grid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  flex: 1;
+  overflow: hidden; // scrolling is virtual, driven by C#
+}
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 150rem;
+  height: 178rem;
+  margin: 0 8rem 10rem 0;
+  border-radius: 4rem;
+  background-color: rgba(0, 0, 0, 0.25);
+  border: 1rem solid transparent;
+  cursor: pointer;
+  overflow: hidden;
+
+  &:hover {
+    border-color: var(--textColorDim);
+  }
+}
+
+.cardSelected {
+  composes: card;
+  border-color: var(--accentColorNormal);
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+// Square (1:1) building image: the card is 150rem wide, so a 150rem-tall thumb
+// is a perfect square. object-fit: contain keeps the render undistorted on both
+// axes (letterboxed inside the square, never stretched).
+.cardThumb {
+  width: 100%;
+  height: 148rem;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+// Name fills the strip below the square image (was the empty size-badge space).
+.cardLabel {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6rem;
+  font-size: 11rem;
+  color: var(--textColor);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// Procedural icon: the guaranteed last-resort tile for buildings that have no
+// image at all (neither a shipped icon nor a generated render). Built from the
+// building's own data so every one of them still looks distinct.
+.cardProcedural {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 148rem;
+  flex: 0 0 auto;
+}
+
+.cardProceduralText {
+  font-size: 34rem;
+  font-weight: bold;
+  letter-spacing: 2rem;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.cardProceduralSub {
+  margin-top: 4rem;
+  font-size: 11rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+// Top-left cluster: zone icon + lot size, overlaid on the thumbnail.
+.cardTopLeft {
+  position: absolute;
+  top: 3rem;
+  left: 3rem;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.cardSize {
+  margin-left: 3rem;
+  padding: 1rem 4rem;
+  font-size: 10rem;
+  color: var(--textColor);
+  background-color: rgba(0, 0, 0, 0.55);
+  border-radius: 3rem;
+}
+
+// Descriptor badge cluster (FindIt style): theme flag, asset-pack flags and
+// the mod flag, STACKED vertically down the top-right corner of the card.
+.cardDescriptors {
+  position: absolute;
+  top: 3rem;
+  right: 3rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.cardDescIcon {
+  width: 18rem;
+  height: 18rem;
+  margin-bottom: 3rem;
+  padding: 2rem;
+  border-radius: 3rem;
+  background-color: rgba(0, 0, 0, 0.55);
+  object-fit: contain;
+}
+
+// "Place on the map" button: bottom-LEFT of the thumbnail, opposite the
+// selected tick so the two never collide.
+.cardPlace {
+  position: absolute;
+  top: 122rem;
+  left: 4rem;
+}
+
+.cardPlaceButton {
+  width: 26rem;
+  height: 26rem;
+  border-radius: 4rem;
+  background-color: rgba(0, 0, 0, 0.55);
+
+  img {
+    width: 16rem;
+    height: 16rem;
+  }
+
+  &:hover {
+    background-color: var(--accentColorNormal);
+  }
+}
+
+// Selected tick: bottom-right of the square thumbnail so it never overlaps the
+// descriptor badges in the top-right corner.
+.cardCheck {
+  position: absolute;
+  top: 126rem;
+  right: 4rem;
+  width: 18rem;
+  height: 18rem;
+}
+
+// Zone icon (child of .cardTopLeft) so you can tell which vanilla zone a
+// building belongs to at a glance.
+.cardZoneBadge {
+  width: 18rem;
+  height: 18rem;
+  padding: 2rem;
+  border-radius: 3rem;
+  background-color: rgba(0, 0, 0, 0.55);
+  object-fit: contain;
+}
+
+// custom scrollbar (virtual)
+.scrollbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 18rem;
+  margin-left: 4rem;
+}
+
+.scrollArrow {
+  width: 18rem;
+  height: 18rem;
+
+  img {
+    width: 12rem;
+    height: 12rem;
+  }
+}
+
+.scrollTrack {
+  position: relative;
+  flex: 1;
+  width: 8rem;
+  margin: 4rem 0;
+  background-color: rgba(0, 0, 0, 0.35);
+  border-radius: 4rem;
+}
+
+.scrollThumb {
+  position: absolute;
+  left: 0;
+  width: 8rem;
+  background-color: var(--accentColorNormal);
+  border-radius: 4rem;
+  cursor: pointer;
+}
+
+.hintBar {
+  margin: 8rem 10rem 0 10rem;
+  padding: 6rem 10rem;
+  font-size: 11rem;
+  color: var(--textColorDim);
+  background-color: rgba(0, 0, 0, 0.25);
+  border-radius: 4rem;
+}
+
+.resizeHandle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 20rem;
+  height: 20rem;
+  cursor: nwse-resize;
+
+  &::after {
+    content: "";
+    position: absolute;
+    right: 5rem;
+    bottom: 5rem;
+    width: 8rem;
+    height: 8rem;
+    border-right: 2rem solid var(--textColorDim);
+    border-bottom: 2rem solid var(--textColorDim);
+  }
+}

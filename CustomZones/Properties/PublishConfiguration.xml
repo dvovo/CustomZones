@@ -1,0 +1,39 @@
+<Publish>
+	<!--Id must be set to a value for an update of an existing mod. 0 means a new mod.-->
+	<ModId Value="0" />
+	<DisplayName Value="Custom Zones" />
+	<ShortDescription Value="Choose exactly which buildings may grow in each zoning area (district)." />
+	<LongDescription>
+# Custom Zones
+
+Create **zoning palettes** (named building whitelists) using a filterable building browser
+(zone type, density, lot size, level, theme, text search), then assign a palette to any district.
+Inside that district, **only the selected buildings will spawn** - everything else is filtered out at birth.
+
+## Features
+- Saved palettes submenu: create, rename, duplicate, delete.
+- Building browser with thumbnails (Asset Icon Library) and Find It-style filters.
+- Per-district assignment, persisted in the savegame.
+- Optional retroactive enforcement of existing buildings.
+
+## Recommended companion mods
+- Asset Icon Library (building thumbnails)
+- Unified Icon Library (UI icons)
+	</LongDescription>
+	<!--Thumbnail-->
+	<Thumbnail Value="Properties/Thumbnail.png" />
+	<!--Screenshot, can be set multiple times-->
+	<Screenshot Value="" />
+	<!--Tag, can be set multiple times-->
+	<Tag Value="Code Mod" />
+	<!--Link to the forum post where the mod can be discussed-->
+	<ForumLink Value="" />
+	<!--Version of the mod-->
+	<ModVersion Value="0.1.0" />
+	<!--Recommended version of the base game to use the mod-->
+	<GameVersion Value="1.3.*" />
+	<!--Dependencies for the mod. Asset Icon Library is soft-required for thumbnails.-->
+	<Dependency Id="" />
+	<ChangeLog>Initial release.</ChangeLog>
+	<ExternalLink Type="github" Url="" />
+</Publish>

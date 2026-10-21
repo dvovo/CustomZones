@@ -1,0 +1,16 @@
+# Visual Studio / Rider / .NET
+.vs/
+.idea/
+bin/
+obj/
+*.user
+*.suo
+
+# UI build dependencies
+CustomZones/UI/node_modules/
+
+# Toolchain leftovers
+CustomZones/Library/
+
+# Internal working notes (not part of the published source)
+RESUMEN_HANDOFF.md

@@ -1,0 +1,107 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Library</OutputType>
+		<LangVersion>9</LangVersion>
+		<TargetFramework>net48</TargetFramework>
+		<Configurations>Debug;Release</Configurations>
+		<Version>0.1.0</Version>
+		<FileVersion>$(Version)</FileVersion>
+		<AssemblyVersion>$(Version)</AssemblyVersion>
+		<Product>Custom Zones</Product>
+		<Description>Create your own zone types: paint them like any zone and only the buildings you picked will grow, by demand.</Description>
+
+		<!-- Folder where Game.dll is located. Only set if the game is NOT in the default location. -->
+		<CustomManagedPath></CustomManagedPath>
+
+		<!-- Mod information required for publishing on PDX Mods. -->
+		<PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
+	</PropertyGroup>
+
+	<!-- Imports must come after the PropertyGroup block.
+	     CSII_TOOLPATH is set by the official CS2 Modding Toolchain installer. -->
+	<Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.props" />
+	<Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.targets" />
+
+	<!-- Build the cohtml UI after the C# build, same as FindIt. -->
+	<Target Name="BuildUI" AfterTargets="AfterBuild">
+		<Exec Command="npm run build" WorkingDirectory="$(ProjectDir)/UI" />
+	</Target>
+
+	<ItemGroup>
+		<EmbeddedResource Include="Locale\*.json" />
+		<None Remove="Locale\*.json" />
+	</ItemGroup>
+
+
+	<ItemGroup>
+		<Reference Include="Game">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.Core">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.Collections">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.AssetPipeline">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.IO.AssetDatabase">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.Localization">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.Logging">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.Mathematics">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.PSI.Common">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.PSI.Environment">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.UI">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Colossal.UI.Binding">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Unity.Burst">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Unity.Collections">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Unity.Entities">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Unity.Mathematics">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Unity.RenderPipelines.Core.Runtime">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="Unity.RenderPipelines.HighDefinition.Runtime">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="UnityEngine.ScreenCaptureModule">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="UnityEngine.ImageConversionModule">
+			<Private>false</Private>
+		</Reference>
+		<Reference Include="UnityEngine.CoreModule">
+			<Private>false</Private>
+		</Reference>
+	</ItemGroup>
+
+	<ItemGroup>
+		<Folder Include="UI\src\components\" />
+	</ItemGroup>
+
+</Project>
