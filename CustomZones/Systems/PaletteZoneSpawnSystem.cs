@@ -24,6 +24,7 @@
 
 namespace CustomZones.Systems
 {
+    using System.Collections.Generic;
     using Game;
     using Game.Buildings;
     using Game.City;
@@ -56,13 +57,83 @@ namespace CustomZones.Systems
         private CommercialDemandSystem m_CommercialDemandSystem;
         private IndustrialDemandSystem m_IndustrialDemandSystem;
         private GroundPollutionSystem m_PollutionSystem;
+        private AirPollutionSystem m_AirPollutionSystem;
+        private NoisePollutionSystem m_NoisePollutionSystem;
         private TerrainSystem m_TerrainSystem;
         private global::Game.Zones.SearchSystem m_SearchSystem;
         private ResourceSystem m_ResourceSystem;
         private CityConfigurationSystem m_CityConfigurationSystem;
         private EndFrameBarrier m_EndFrameBarrier;
 
-        public override int GetUpdateInterval(SystemUpdatePhase phase) => 8;
+        // Growth diagnosis: one entry per custom-zone lot evaluated, (zone index << 4) | stage.
+        private NativeQueue<int> m_LotResults;
+        private JobHandle m_LotResultsWriter;
+        private readonly Dictionary<ushort, ZoneGrowth> m_Growth = new();
+        private bool m_SpawnResidential;
+        private bool m_SpawnCommercial;
+        private bool m_SpawnIndustrial;
+        private bool m_SpawnStorage;
+
+        /// <summary>How far the lots of a custom zone got in the last spawn pass (best stage reached).</summary>
+        public struct ZoneGrowth
+        {
+            /// <summary>Free lots of the zone that were evaluated.</summary>
+            public int Lots;
+
+            /// <summary>Best stage any lot reached (a <see cref="GrowthStage"/>).</summary>
+            public GrowthStage Stage;
+        }
+
+        /// <summary>What stopped the zone's buildings, in the order the spawner checks.</summary>
+        public enum GrowthStage
+        {
+            /// <summary>No free lot was evaluated.</summary>
+            NoLots = -1,
+
+            /// <summary>No chosen building fits a free lot (size, height).</summary>
+            NothingFits = 0,
+
+            /// <summary>Some fit, but the city has no demand for them.</summary>
+            NoDemand = 1,
+
+            /// <summary>Wanted, but the location scores too low for them.</summary>
+            LowScore = 2,
+
+            /// <summary>A building was picked for a lot: it is growing.</summary>
+            Growing = 3,
+
+            /// <summary>The demand bar of this zone type is empty.</summary>
+            TypeHasNoDemand = 4,
+        }
+
+        /// <summary>Growth diagnosis of a custom zone (by zone type index); false before the first pass.</summary>
+        public bool TryGetGrowth(ushort zoneIndex, out ZoneGrowth growth)
+        {
+            if (m_Growth.TryGetValue(zoneIndex, out growth))
+            {
+                return true;
+            }
+
+            growth = new ZoneGrowth { Lots = 0, Stage = GrowthStage.NoLots };
+            return m_HasRun;
+        }
+
+        /// <summary>Whether the game lets this zone type grow at all now (its demand bar is not empty).</summary>
+        public bool TypeCanGrow(AreaType areaType) => areaType switch
+        {
+            AreaType.Residential => m_SpawnResidential,
+            AreaType.Commercial => m_SpawnCommercial,
+            AreaType.Industrial => m_SpawnIndustrial || m_SpawnStorage,
+            _ => true,
+        };
+
+        private bool m_HasRun;
+        private readonly Dictionary<ushort, GrowthStage> m_LoggedStages = new();
+
+        // Same pace as the game's ZoneSpawnSystem (every 16 frames, offset 13).
+        public override int GetUpdateInterval(SystemUpdatePhase phase) => 16;
+
+        public override int GetUpdateOffset(SystemUpdatePhase phase) => 13;
 
         protected override void OnCreate()
         {
@@ -99,6 +170,8 @@ namespace CustomZones.Systems
             m_CommercialDemandSystem = World.GetOrCreateSystemManaged<CommercialDemandSystem>();
             m_IndustrialDemandSystem = World.GetOrCreateSystemManaged<IndustrialDemandSystem>();
             m_PollutionSystem = World.GetOrCreateSystemManaged<GroundPollutionSystem>();
+            m_AirPollutionSystem = World.GetOrCreateSystemManaged<AirPollutionSystem>();
+            m_NoisePollutionSystem = World.GetOrCreateSystemManaged<NoisePollutionSystem>();
             m_TerrainSystem = World.GetOrCreateSystemManaged<TerrainSystem>();
             m_SearchSystem = World.GetOrCreateSystemManaged<global::Game.Zones.SearchSystem>();
             m_ResourceSystem = World.GetOrCreateSystemManaged<ResourceSystem>();
@@ -106,10 +179,72 @@ namespace CustomZones.Systems
             m_EndFrameBarrier = World.GetOrCreateSystemManaged<EndFrameBarrier>();
 
             RequireForUpdate(m_VacantLotsQuery);
+            m_LotResults = new NativeQueue<int>(Allocator.Persistent);
+        }
+
+        protected override void OnDestroy()
+        {
+            m_LotResultsWriter.Complete();
+            if (m_LotResults.IsCreated)
+            {
+                m_LotResults.Dispose();
+            }
+
+            base.OnDestroy();
+        }
+
+        /// <summary>Folds the previous pass's per-lot results into the per-zone diagnosis.</summary>
+        private void CollectLotResults()
+        {
+            m_LotResultsWriter.Complete();
+            m_Growth.Clear();
+            while (m_LotResults.TryDequeue(out var result))
+            {
+                var zoneIndex = (ushort)(result >> 4);
+                var stage = (GrowthStage)(result & 0xF);
+                m_Growth.TryGetValue(zoneIndex, out var growth);
+                if (growth.Lots == 0)
+                {
+                    growth.Stage = stage;
+                }
+                else if (stage != GrowthStage.TypeHasNoDemand && (growth.Stage == GrowthStage.TypeHasNoDemand || stage > growth.Stage))
+                {
+                    growth.Stage = stage;
+                }
+
+                growth.Lots++;
+                m_Growth[zoneIndex] = growth;
+            }
+
+            m_HasRun = true;
+
+            // Log when a zone's diagnosis changes (support / debugging).
+            foreach (var kv in m_Growth)
+            {
+                if (!m_LoggedStages.TryGetValue(kv.Key, out var logged) || logged != kv.Value.Stage)
+                {
+                    m_LoggedStages[kv.Key] = kv.Value.Stage;
+                    Mod.Log.Info($"Growth: custom zone type {kv.Key}: {kv.Value.Lots} free lots, {kv.Value.Stage}.");
+                }
+            }
         }
 
         protected override void OnUpdate()
         {
+            // The game's overall gates: no type grows while its demand bar is empty.
+            var fastSpawn = m_ZoneSpawnSystem.debugFastSpawn;
+            var residentialDemand = m_ResidentialDemandSystem.buildingDemand;
+            var spawnResidential = fastSpawn || (residentialDemand.x + residentialDemand.y + residentialDemand.z) / 3 > 0;
+            var spawnCommercial = fastSpawn || m_CommercialDemandSystem.buildingDemand > 0;
+            var spawnIndustrial = fastSpawn || (m_IndustrialDemandSystem.industrialBuildingDemand + m_IndustrialDemandSystem.officeBuildingDemand) / 2 > 0;
+            var spawnStorage = fastSpawn || m_IndustrialDemandSystem.storageBuildingDemand > 0;
+            m_SpawnResidential = spawnResidential;
+            m_SpawnCommercial = spawnCommercial;
+            m_SpawnIndustrial = spawnIndustrial;
+            m_SpawnStorage = spawnStorage;
+
+            CollectLotResults();
+
             var residentialQ = new NativeQueue<ZoneSpawnSystem.SpawnLocation>(Allocator.TempJob);
             var commercialQ = new NativeQueue<ZoneSpawnSystem.SpawnLocation>(Allocator.TempJob);
             var industrialQ = new NativeQueue<ZoneSpawnSystem.SpawnLocation>(Allocator.TempJob);
@@ -140,6 +275,12 @@ namespace CustomZones.Systems
                 resourcePrefabs = m_ResourceSystem.GetPrefabs(),
 
                 groundPollutionMap = m_PollutionSystem.GetMap(true, out var pollutionJob),
+                airPollutionMap = m_AirPollutionSystem.GetMap(true, out var airPollutionJob),
+                noisePollutionMap = m_NoisePollutionSystem.GetMap(true, out var noisePollutionJob),
+                spawnResidential = spawnResidential,
+                spawnCommercial = spawnCommercial,
+                spawnIndustrial = spawnIndustrial,
+                spawnStorage = spawnStorage,
                 zonePreferenceData = SystemAPI.GetSingleton<ZonePreferenceData>(),
                 industrialProcesses = m_ProcessQuery.ToComponentDataListAsync<IndustrialProcessData>(World.UpdateAllocator.ToAllocator, out var processJob),
 
@@ -148,6 +289,7 @@ namespace CustomZones.Systems
                 industrialDemands = m_IndustrialDemandSystem.GetBuildingDemands(out var industrialDemandJob),
                 storageDemands = m_IndustrialDemandSystem.GetStorageBuildingDemands(out var storageDemandJob),
 
+                lotResults = m_LotResults.AsParallelWriter(),
                 residentialQ = residentialQ.AsParallelWriter(),
                 commercialQ = commercialQ.AsParallelWriter(),
                 industrialQ = industrialQ.AsParallelWriter(),
@@ -189,12 +331,15 @@ namespace CustomZones.Systems
                 m_VacantLotsQuery,
                 JobHandle.CombineDependencies(
                     JobHandle.CombineDependencies(Dependency, pollutionJob, processJob),
+                    JobHandle.CombineDependencies(airPollutionJob, noisePollutionJob),
                     JobHandle.CombineDependencies(commercialDemandJob, industrialDemandJob, storageDemandJob)));
 
             var spawnHandle = spawnBuildingJob.Schedule(3, 1, JobHandle.CombineDependencies(evaluateHandle, searchTreeJob));
 
             m_ResourceSystem.AddPrefabsReader(evaluateHandle);
             m_PollutionSystem.AddReader(evaluateHandle);
+            m_AirPollutionSystem.AddReader(evaluateHandle);
+            m_NoisePollutionSystem.AddReader(evaluateHandle);
             m_CommercialDemandSystem.AddReader(evaluateHandle);
             m_IndustrialDemandSystem.AddReader(evaluateHandle);
 
@@ -207,6 +352,7 @@ namespace CustomZones.Systems
             m_EndFrameBarrier.AddJobHandleForProducer(spawnHandle);
             m_SearchSystem.AddSearchTreeReader(spawnHandle);
 
+            m_LotResultsWriter = evaluateHandle;
             Dependency = spawnHandle;
         }
 
@@ -237,6 +383,12 @@ namespace CustomZones.Systems
             [ReadOnly] public ResourcePrefabs resourcePrefabs;
 
             [ReadOnly] public NativeArray<GroundPollution> groundPollutionMap;
+            [ReadOnly] public NativeArray<AirPollution> airPollutionMap;
+            [ReadOnly] public NativeArray<NoisePollution> noisePollutionMap;
+            public bool spawnResidential;
+            public bool spawnCommercial;
+            public bool spawnIndustrial;
+            public bool spawnStorage;
             public ZonePreferenceData zonePreferenceData;
             [ReadOnly] public NativeList<IndustrialProcessData> industrialProcesses;
 
@@ -245,6 +397,7 @@ namespace CustomZones.Systems
             [ReadOnly] public NativeArray<int> industrialDemands;
             [ReadOnly] public NativeArray<int> storageDemands;
 
+            public NativeQueue<int>.ParallelWriter lotResults;
             public NativeQueue<ZoneSpawnSystem.SpawnLocation>.ParallelWriter residentialQ;
             public NativeQueue<ZoneSpawnSystem.SpawnLocation>.ParallelWriter commercialQ;
             public NativeQueue<ZoneSpawnSystem.SpawnLocation>.ParallelWriter industrialQ;
@@ -255,7 +408,11 @@ namespace CustomZones.Systems
             public void Execute(in ArchetypeChunk chunk, int unfilteredChunkIndex, bool useEnabledMask, in v128 chunkEnabledMask)
             {
                 var random = randomSeed.GetRandom(unfilteredChunkIndex);
-                var best = default(ZoneSpawnSystem.SpawnLocation);
+
+                // Best lot per type, like the game (one candidate of each type per chunk).
+                var bestResidential = default(ZoneSpawnSystem.SpawnLocation);
+                var bestCommercial = default(ZoneSpawnSystem.SpawnLocation);
+                var bestIndustrial = default(ZoneSpawnSystem.SpawnLocation);
 
                 var entities = chunk.GetNativeArray(entityHandle);
                 var vacantLotsAccessor = chunk.GetBufferAccessor(ref vacantLotHandle);
@@ -292,28 +449,100 @@ namespace CustomZones.Systems
                             continue;
                         }
 
+                        // The game cuts every free run wider than 8 cells into two lots
+                        // that each reach the middle, so a building wider than half the run
+                        // never fits and the halves get built from the middle. A custom
+                        // zone's catalog may only have big buildings: evaluate the whole
+                        // run instead (the building is then placed at one of its ends).
+                        if (!MergeRun(vacantLots, j, ref vacantLot))
+                        {
+                            continue; // already evaluated as part of an earlier lot's run
+                        }
+
                         var curvePosScalar = CalculateCurvePos(curvePos, vacantLot, block);
 
-                        TryAddLot(allowed, ref best, ref random, owner.m_Owner, curvePosScalar, entity,
-                            vacantLot.m_Area, vacantLot.m_Flags, (int)vacantLot.m_Height, zoneData, zoneProperties, estimates);
+                        var zoneIndex = zoneData.m_ZoneType.m_Index;
+                        var typeCanGrow = zoneData.m_AreaType switch
+                        {
+                            AreaType.Residential => spawnResidential,
+                            AreaType.Commercial => spawnCommercial,
+                            AreaType.Industrial => spawnIndustrial || spawnStorage,
+                            _ => false,
+                        };
+                        if (!typeCanGrow)
+                        {
+                            lotResults.Enqueue((zoneIndex << 4) | (int)GrowthStage.TypeHasNoDemand);
+                            continue;
+                        }
+
+                        switch (zoneData.m_AreaType)
+                        {
+                            case AreaType.Residential when spawnResidential:
+                                TryAddLot(allowed, ref bestResidential, ref random, owner.m_Owner, curvePosScalar, entity,
+                                    vacantLot.m_Area, vacantLot.m_Flags, (int)vacantLot.m_Height, zoneData, zoneProperties, estimates, true, false);
+                                break;
+                            case AreaType.Commercial when spawnCommercial:
+                                TryAddLot(allowed, ref bestCommercial, ref random, owner.m_Owner, curvePosScalar, entity,
+                                    vacantLot.m_Area, vacantLot.m_Flags, (int)vacantLot.m_Height, zoneData, zoneProperties, estimates, true, false);
+                                break;
+                            case AreaType.Industrial when spawnIndustrial || spawnStorage:
+                                TryAddLot(allowed, ref bestIndustrial, ref random, owner.m_Owner, curvePosScalar, entity,
+                                    vacantLot.m_Area, vacantLot.m_Flags, (int)vacantLot.m_Height, zoneData, zoneProperties, estimates, spawnIndustrial, spawnStorage);
+                                break;
+                        }
                     }
                 }
 
-                if (best.m_Priority != 0f)
+                if (bestResidential.m_Priority != 0f)
                 {
-                    switch (best.m_AreaType)
-                    {
-                        case AreaType.Commercial:
-                            commercialQ.Enqueue(best);
-                            break;
-                        case AreaType.Industrial:
-                            industrialQ.Enqueue(best);
-                            break;
-                        case AreaType.Residential:
-                            residentialQ.Enqueue(best);
-                            break;
-                    }
+                    residentialQ.Enqueue(bestResidential);
                 }
+
+                if (bestCommercial.m_Priority != 0f)
+                {
+                    commercialQ.Enqueue(bestCommercial);
+                }
+
+                if (bestIndustrial.m_Priority != 0f)
+                {
+                    industrialQ.Enqueue(bestIndustrial);
+                }
+            }
+
+            /// <summary>
+            /// Joins the lot with the other half of its free run (same zone, same
+            /// depth, touching). Returns false when the other half comes first in
+            /// the buffer (the run was evaluated with it).
+            /// </summary>
+            private static bool MergeRun(DynamicBuffer<VacantLot> lots, int index, ref VacantLot lot)
+            {
+                for (var k = 0; k < lots.Length; k++)
+                {
+                    if (k == index)
+                    {
+                        continue;
+                    }
+
+                    var other = lots[k];
+                    if (!other.m_Type.Equals(lot.m_Type) ||
+                        other.m_Area.z != lot.m_Area.z || other.m_Area.w != lot.m_Area.w ||
+                        other.m_Area.x > lot.m_Area.y || other.m_Area.y < lot.m_Area.x)
+                    {
+                        continue;
+                    }
+
+                    if (k < index)
+                    {
+                        return false;
+                    }
+
+                    lot.m_Area.x = math.min(lot.m_Area.x, other.m_Area.x);
+                    lot.m_Area.y = math.max(lot.m_Area.y, other.m_Area.y);
+                    lot.m_Flags |= other.m_Flags;
+                    lot.m_Height = (short)math.min((int)lot.m_Height, (int)other.m_Height);
+                }
+
+                return true;
             }
 
             private float CalculateCurvePos(CurvePosition curvePosition, VacantLot lot, Block block)
@@ -324,7 +553,7 @@ namespace CustomZones.Systems
 
             private void TryAddLot(DynamicBuffer<PaletteAllowedBuilding> allowed, ref ZoneSpawnSystem.SpawnLocation bestLocation,
                 ref Random random, Entity road, float curvePos, Entity entity, int4 area, LotFlags flags, int height,
-                ZoneData zoneData, ZonePropertiesData zoneProperties, DynamicBuffer<ProcessEstimate> estimates)
+                ZoneData zoneData, ZonePropertiesData zoneProperties, DynamicBuffer<ProcessEstimate> estimates, bool normal, bool storage)
             {
                 if (!resourceAvailabilityLookup.HasBuffer(road))
                 {
@@ -357,13 +586,19 @@ namespace CustomZones.Systems
                 }
 
                 var position = ZoneUtils.GetPosition(blockLookup[spawnLocation.m_Entity], spawnLocation.m_LotArea.xz, spawnLocation.m_LotArea.yw);
-                var pollution = GroundPollutionSystem.GetPollution(position, groundPollutionMap).m_Pollution;
+                // Ground, noise and air pollution, in the order the game's score expects.
+                var pollution = new float3(
+                    GroundPollutionSystem.GetPollution(position, groundPollutionMap).m_Pollution,
+                    NoisePollutionSystem.GetPollution(position, noisePollutionMap).m_Pollution,
+                    AirPollutionSystem.GetPollution(position, airPollutionMap).m_Pollution);
                 var landValue = landValueLookup[road].m_LandValue;
                 var maxHeight = height - position.y;
 
-                if (SelectBuilding(allowed, ref spawnLocation, ref random, availabilities, zoneData, zoneProperties,
-                        curvePos, pollution, landValue, maxHeight, estimates, office)
-                    && spawnLocation.m_Priority > bestLocation.m_Priority)
+                var selected = SelectBuilding(allowed, ref spawnLocation, ref random, availabilities, zoneData, zoneProperties,
+                    curvePos, pollution, landValue, maxHeight, estimates, office, normal, storage, out var stage);
+                lotResults.Enqueue((zoneData.m_ZoneType.m_Index << 4) | (int)stage);
+
+                if (selected && spawnLocation.m_Priority > bestLocation.m_Priority)
                 {
                     bestLocation = spawnLocation;
                 }
@@ -371,8 +606,10 @@ namespace CustomZones.Systems
 
             private bool SelectBuilding(DynamicBuffer<PaletteAllowedBuilding> allowed, ref ZoneSpawnSystem.SpawnLocation location,
                 ref Random random, DynamicBuffer<ResourceAvailability> availabilities, ZoneData zoneData, ZonePropertiesData zoneProperties,
-                float curvePos, float pollution, float landValue, float maxHeight, DynamicBuffer<ProcessEstimate> estimates, bool office)
+                float curvePos, float3 pollution, float landValue, float maxHeight, DynamicBuffer<ProcessEstimate> estimates, bool office,
+                bool normal, bool storage, out GrowthStage stage)
             {
+                stage = GrowthStage.NothingFits;
                 var maxLotSize = location.m_LotArea.yw - location.m_LotArea.xz;
                 var chosenBuildingData = default(BuildingData);
                 var lotAccess = new bool2((location.m_LotFlags & LotFlags.CornerLeft) > 0, (location.m_LotFlags & LotFlags.CornerRight) > 0);
@@ -382,7 +619,9 @@ namespace CustomZones.Systems
                 {
                     var building = allowed[i].m_Building;
 
-                    if (!spawnableLookup.TryGetComponent(building, out var spawnableData) || spawnableData.m_Level != 1 ||
+                    // Any level: a zone may choose a building at level 3 for its design,
+                    // and it is then born at that level.
+                    if (!spawnableLookup.TryGetComponent(building, out var spawnableData) ||
                         !buildingLookup.TryGetComponent(building, out var subjBuildingData) ||
                         !propertyLookup.TryGetComponent(building, out var buildingPropertyData) ||
                         !objGeomLookup.TryGetComponent(building, out var objGeom))
@@ -401,7 +640,18 @@ namespace CustomZones.Systems
                         continue;
                     }
 
+                    if (stage < GrowthStage.NoDemand)
+                    {
+                        stage = GrowthStage.NoDemand;
+                    }
+
                     var isStorage = warehouseLookup.HasComponent(building);
+
+                    // Industry: warehouses only while storage is in demand, the rest only while industry is.
+                    if (isStorage ? !storage : !normal)
+                    {
+                        continue;
+                    }
                     var evalAreaType = zoneDataLookup[spawnableData.m_ZonePrefab].m_AreaType;
                     var zoneDensity = PropertyUtils.GetZoneDensity(zoneData, zoneProperties);
                     var num = EvaluateDemandAndAvailability(evalAreaType, buildingPropertyData, zoneDensity, isStorage);
@@ -409,6 +659,11 @@ namespace CustomZones.Systems
                     if (num < minDemand)
                     {
                         continue;
+                    }
+
+                    if (stage < GrowthStage.LowScore)
+                    {
+                        stage = GrowthStage.LowScore;
                     }
 
                     var int2 = math.select(maxLotSize - lotSize, 0, lotSize == maxLotSize - 1);
@@ -439,6 +694,11 @@ namespace CustomZones.Systems
                         estimates, industrialProcesses, resourcePrefabs, ref resourceDataLookup);
                     score = math.select(score, math.max(0f, score) + 1f, minDemand == 0);
                     num2 *= score;
+
+                    if (num2 > 0)
+                    {
+                        stage = GrowthStage.Growing;
+                    }
 
                     if (num2 > location.m_Priority && num2 > 0)
                     {

@@ -1,5 +1,5 @@
 // <copyright file="UIEntries.cs">
-// CustomZones - Licensed under the MIT license.
+// Custom Zones - Licensed under the MIT license.
 // IJsonWritable binding DTO pattern follows FindIt's Domain/UIBinding classes.
 // </copyright>
 
@@ -7,50 +7,91 @@ namespace CustomZones.Domain.UIBinding
 {
     using Colossal.UI.Binding;
 
-    public class BuildingUIEntry : IJsonWritable
+    /// <summary>One building family card in the zone editor.</summary>
+    public class FamilyUIEntry : IJsonWritable
     {
+        public string Key;
         public string Name;
-        public string DisplayName;
         public string Thumbnail;
         public string FallbackThumbnail;
-        public int Category;
-        public int Density;
-        public int Level;
-        public int LotWidth;
-        public int LotDepth;
+        public string[] LotSizes = System.Array.Empty<string>();
+        public int MinLevel;
+        public int MaxLevel;
+        public int MemberCount;
         public bool Selected;
-
-        /// <summary>Theme name (tooltip) + flag icon URL for the card badge.</summary>
         public string Theme;
         public string ThemeIcon;
-
-        /// <summary>True if the building is from a subscribed mod (shows the PDX badge).</summary>
         public bool IsMod;
-
-        /// <summary>Asset-pack names of this building (card badges look up icons via the Packs/PackIcons bindings).</summary>
         public string[] Packs = System.Array.Empty<string>();
+
+        /// <summary>Large picture for the hover preview (BIG's full-size icon when available).</summary>
+        public string Picture;
+
+        /// <summary>Level the card shows (the level filter, else the lowest chosen / existing level).</summary>
+        public int ShownLevel = 1;
+
+        /// <summary>Levels of this building chosen for the zone.</summary>
+        public int[] SelectedLevels = System.Array.Empty<int>();
+
+        /// <summary>Large picture of each level 1..5 ("" where the level does not exist).</summary>
+        public string[] LevelPictures = System.Array.Empty<string>();
+
+        /// <summary>Thumbnail of each level of this building, "" where there is none (index 0 = level 1).</summary>
+        public string[] LevelThumbnails = System.Array.Empty<string>();
+
+        /// <summary>Goods the shown building sells / makes / stores (game resource name, "" for housing).</summary>
+        public string Goods = string.Empty;
+
+        /// <summary>Whether the city currently wants more of the shown building (it only grows then).</summary>
+        public bool HasDemand = true;
+
+        /// <summary>What it does with the goods: "sells", "makes", "stores", "office" ("" for housing).</summary>
+        public string GoodsRole = string.Empty;
 
         public void Write(IJsonWriter writer)
         {
             writer.TypeBegin(GetType().FullName);
+            writer.PropertyName("goods");
+            writer.Write(Goods);
+            writer.PropertyName("hasDemand");
+            writer.Write(HasDemand);
+            writer.PropertyName("goodsRole");
+            writer.Write(GoodsRole);
+            writer.PropertyName("picture");
+            writer.Write(Picture);
+            writer.PropertyName("levelThumbnails");
+            WriteStrings(writer, LevelThumbnails);
+            writer.PropertyName("levelPictures");
+            WriteStrings(writer, LevelPictures);
+            writer.PropertyName("shownLevel");
+            writer.Write(ShownLevel);
+            writer.PropertyName("selectedLevels");
+            writer.ArrayBegin(SelectedLevels?.Length ?? 0);
+            if (SelectedLevels != null)
+            {
+                foreach (var level in SelectedLevels)
+                {
+                    writer.Write(level);
+                }
+            }
+
+            writer.ArrayEnd();
+            writer.PropertyName("key");
+            writer.Write(Key);
             writer.PropertyName("name");
             writer.Write(Name);
-            writer.PropertyName("displayName");
-            writer.Write(DisplayName);
             writer.PropertyName("thumbnail");
             writer.Write(Thumbnail);
             writer.PropertyName("fallbackThumbnail");
             writer.Write(FallbackThumbnail);
-            writer.PropertyName("category");
-            writer.Write(Category);
-            writer.PropertyName("density");
-            writer.Write(Density);
-            writer.PropertyName("level");
-            writer.Write(Level);
-            writer.PropertyName("lotWidth");
-            writer.Write(LotWidth);
-            writer.PropertyName("lotDepth");
-            writer.Write(LotDepth);
+            writer.PropertyName("lotSizes");
+            WriteStrings(writer, LotSizes);
+            writer.PropertyName("minLevel");
+            writer.Write(MinLevel);
+            writer.PropertyName("maxLevel");
+            writer.Write(MaxLevel);
+            writer.PropertyName("memberCount");
+            writer.Write(MemberCount);
             writer.PropertyName("selected");
             writer.Write(Selected);
             writer.PropertyName("theme");
@@ -60,26 +101,38 @@ namespace CustomZones.Domain.UIBinding
             writer.PropertyName("isMod");
             writer.Write(IsMod);
             writer.PropertyName("packs");
-            writer.ArrayBegin(Packs?.Length ?? 0);
-            if (Packs != null)
+            WriteStrings(writer, Packs);
+            writer.TypeEnd();
+        }
+
+        internal static void WriteStrings(IJsonWriter writer, string[] values)
+        {
+            writer.ArrayBegin(values?.Length ?? 0);
+            if (values != null)
             {
-                foreach (var p in Packs)
+                foreach (var value in values)
                 {
-                    writer.Write(p);
+                    writer.Write(value);
                 }
             }
+
             writer.ArrayEnd();
-            writer.TypeEnd();
         }
     }
 
+    /// <summary>One custom zone in the editor's zone list.</summary>
     public class PaletteUIEntry : IJsonWritable
     {
         public string Id;
         public string Name;
-        public int BuildingCount;
         public int Category;
         public int Density;
+        public string Color;
+        public string Icon;
+        public int FamilyCount;
+        public int BuildingCount;
+        public bool LevelUp;
+        public bool KeepDesign;
 
         public void Write(IJsonWriter writer)
         {
@@ -88,14 +141,77 @@ namespace CustomZones.Domain.UIBinding
             writer.Write(Id);
             writer.PropertyName("name");
             writer.Write(Name);
-            writer.PropertyName("buildingCount");
-            writer.Write(BuildingCount);
             writer.PropertyName("category");
             writer.Write(Category);
             writer.PropertyName("density");
             writer.Write(Density);
+            writer.PropertyName("color");
+            writer.Write(Color);
+            writer.PropertyName("icon");
+            writer.Write(Icon);
+            writer.PropertyName("familyCount");
+            writer.Write(FamilyCount);
+            writer.PropertyName("buildingCount");
+            writer.Write(BuildingCount);
+            writer.PropertyName("levelUp");
+            writer.Write(LevelUp);
+            writer.PropertyName("keepDesign");
+            writer.Write(KeepDesign);
             writer.TypeEnd();
         }
     }
 
+    /// <summary>What the selected zone can and cannot grow (shown under its settings).</summary>
+    public class CoverageUIEntry : IJsonWritable
+    {
+        /// <summary>Level-1 prefabs the spawner can choose from.</summary>
+        public int GrowableBuildings;
+
+        /// <summary>Lot widths 1..6+ the zone has at least one building for.</summary>
+        public int[] CoveredWidths = System.Array.Empty<int>();
+
+        /// <summary>Highest building level any family reaches.</summary>
+        public int MaxLevel;
+
+        /// <summary>Chosen buildings the city currently has demand for.</summary>
+        public int DemandReady;
+
+        /// <summary>Goods of the chosen buildings without demand right now (game resource names).</summary>
+        public string[] BlockedGoods = System.Array.Empty<string>();
+
+        /// <summary>Growth diagnosis (PaletteZoneSpawnSystem.GrowthStage; -2 = not known yet).</summary>
+        public int GrowthStage = -2;
+
+        /// <summary>Free lots of the zone in the last spawn pass.</summary>
+        public int GrowthLots;
+
+        public void Write(IJsonWriter writer)
+        {
+            writer.TypeBegin(GetType().FullName);
+            writer.PropertyName("growableBuildings");
+            writer.Write(GrowableBuildings);
+            writer.PropertyName("coveredWidths");
+            writer.ArrayBegin(CoveredWidths?.Length ?? 0);
+            if (CoveredWidths != null)
+            {
+                foreach (var width in CoveredWidths)
+                {
+                    writer.Write(width);
+                }
+            }
+
+            writer.ArrayEnd();
+            writer.PropertyName("maxLevel");
+            writer.Write(MaxLevel);
+            writer.PropertyName("demandReady");
+            writer.Write(DemandReady);
+            writer.PropertyName("blockedGoods");
+            FamilyUIEntry.WriteStrings(writer, BlockedGoods);
+            writer.PropertyName("growthStage");
+            writer.Write(GrowthStage);
+            writer.PropertyName("growthLots");
+            writer.Write(GrowthLots);
+            writer.TypeEnd();
+        }
+    }
 }

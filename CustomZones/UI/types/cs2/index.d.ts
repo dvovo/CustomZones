@@ -70,33 +70,58 @@ declare module "cs2/modding" {
 declare module "cs2/ui" {
   import * as React from "react";
 
-  export const Button: React.ComponentType<{
-    variant?: string;
-    className?: string;
-    theme?: Record<string, string>;
-    onSelect?: () => void;
-    children?: React.ReactNode;
-  }>;
+  // Loose typings for the game's UI components (see the official modding
+  // types for the full props). Extra props are allowed on purpose.
+  type Props = { className?: string; children?: React.ReactNode; [key: string]: any };
 
-  export const Dropdown: React.ComponentType<{
-    theme?: Record<string, string>;
-    content?: React.ReactNode;
-    children?: React.ReactNode;
-  }>;
+  export const Button: React.ComponentType<
+    Props & {
+      variant?: "flat" | "primary" | "round" | "menu" | "icon" | "floating" | "text" | "default";
+      selected?: boolean;
+      disabled?: boolean;
+      src?: string;
+      tinted?: boolean;
+      theme?: Record<string, string>;
+      tooltipLabel?: React.ReactNode;
+      onSelect?: () => void;
+    }
+  >;
 
-  export const DropdownItem: React.ComponentType<{
-    value?: unknown;
-    closeOnSelect?: boolean;
-    onChange?: () => void;
-    children?: React.ReactNode;
-  }>;
+  export const Panel: React.ComponentType<
+    Props & {
+      header?: React.ReactNode;
+      footer?: React.ReactNode;
+      contentClassName?: string;
+      theme?: Record<string, string>;
+      onClose?: () => void;
+    }
+  >;
 
-  export const DropdownToggle: React.ComponentType<{
-    children?: React.ReactNode;
-  }>;
+  export const Scrollable: React.ComponentType<
+    Props & { vertical?: boolean; horizontal?: boolean; trackVisibility?: "always" | "scrollable" | "reserve" }
+  >;
 
-  export const Tooltip: React.ComponentType<{
-    tooltip?: React.ReactNode;
-    children?: React.ReactNode;
-  }>;
+  export const Icon: React.ComponentType<Props & { src: string; tinted?: boolean | string }>;
+
+  export const Dropdown: React.ComponentType<
+    Props & {
+      theme?: Record<string, string>;
+      content?: React.ReactNode;
+      alignment?: "left" | "right";
+      onToggle?: (visible: boolean) => void;
+    }
+  >;
+
+  export const DropdownToggle: React.ComponentType<
+    Props & { theme?: Record<string, string>; tooltip?: React.ReactNode; disabled?: boolean }
+  >;
+
+  export const Tooltip: React.ComponentType<
+    Props & {
+      tooltip?: React.ReactNode;
+      direction?: "up" | "down" | "left" | "right";
+      alignment?: "start" | "center" | "end";
+      disabled?: boolean;
+    }
+  >;
 }

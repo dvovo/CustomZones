@@ -1,5 +1,5 @@
 // <copyright file="PaletteUISystem.cs">
-// CustomZones - Licensed under the MIT license.
+// Custom Zones - Licensed under the MIT license.
 // Binding architecture follows Platter's P_UISystem and FindIt's
 // FindItUISystem (ValueBindingHelper + TriggerBinding + virtual scroll).
 // </copyright>
@@ -9,67 +9,85 @@ namespace CustomZones.Systems
     using Game.Prefabs;
     using Game.Tools;
     using System;
-    using Unity.Entities;
     using System.Collections.Generic;
     using System.Linq;
+    using Unity.Entities;
     using CustomZones.Domain;
     using CustomZones.Domain.UIBinding;
+    using CustomZones.Integration;
     using CustomZones.Storage;
     using CustomZones.Utilities;
 
     /// <summary>
-    /// Exposes the palette library and the filterable building browser to
-    /// the React UI, and receives UI triggers. Painting happens with the
-    /// vanilla zoning tool (palette zones live in their own toolbar
-    /// category, created by PaletteZoneSystem), so there is no assignment
-    /// UI anymore.
+    /// Feeds the zone editor (side panel) with the custom zone library and the
+    /// filterable building-family browser, and receives its actions. Painting
+    /// itself is done with the vanilla zoning tool: every custom zone has its own
+    /// button in the "Custom Zones" toolbar tab (PaletteZoneSystem).
     /// </summary>
     public partial class PaletteUISystem : ExtendedUISystemBase
     {
+        private const int MinGridColumns = 2;
+        private const int MaxGridColumns = 8;
+        private const int MinGridRows = 1;
+        private const int MaxGridRows = 12;
+
         private BuildingIndexSystem m_IndexSystem;
         private PaletteZoneSystem m_ZoneSystem;
+        private IconGeneratorSystem m_IconGenerator;
         private ToolSystem m_ToolSystem;
 
-        private readonly BrowserFilters m_Filters = new();
+        private readonly FamilyFilters m_Filters = new();
         private string m_SelectedPaletteId = string.Empty;
 
         private int m_LastIndexVersion = -1;
         private int m_LastStorageVersion = -1;
         private bool m_BrowserDirty = true;
 
-        // --- Virtual scrolling (FindIt-style): only the visible window of
-        // the filtered list ever crosses the UI binding. ---
-        public const int GridRows = 5;
-        private const int MinGridColumns = 3;
-        private const int MaxGridColumns = 12;
-        private readonly List<BuildingEntry> m_FilteredCache = new();
+        // Virtual scrolling (FindIt-style): only the visible rows of the filtered
+        // list ever cross the UI binding.
+        private readonly List<BuildingFamily> m_FilteredCache = new();
         private double m_ScrollRow;
-        private int m_GridColumns = 4;
+        private int m_GridColumns = 3;
+        private int m_GridRows = 4;
         private bool m_WindowDirty = true;
 
-        // --- Bindings to JS ---
         private ValueBindingHelper<bool> m_PanelVisible;
-        private ValueBindingHelper<bool> m_PainterToolActiveBinding;
+        private ValueBindingHelper<bool> m_ZoneToolActive;
+        private ValueBindingHelper<string> m_ActiveZonePalette;
         private ValueBindingHelper<PaletteUIEntry[]> m_Palettes;
-        private ValueBindingHelper<BuildingUIEntry[]> m_Buildings;
+        private ValueBindingHelper<string> m_SelectedPalette;
+        private ValueBindingHelper<FamilyUIEntry[]> m_Families;
+        private ValueBindingHelper<int> m_FamilyCount;
+        private ValueBindingHelper<CoverageUIEntry> m_Coverage;
+        private ValueBindingHelper<string[]> m_ColorChoices;
         private ValueBindingHelper<string[]> m_Packs;
         private ValueBindingHelper<string[]> m_PackIcons;
-        private ValueBindingHelper<string> m_SelectedPalette;
         private ValueBindingHelper<int> m_FilterLotWidth;
-        private ValueBindingHelper<int> m_FilterLotDepth;
         private ValueBindingHelper<int> m_FilterLevel;
         private ValueBindingHelper<string> m_FilterPack;
         private ValueBindingHelper<string> m_FilterSearch;
         private ValueBindingHelper<bool> m_FilterSelectedOnly;
+        private ValueBindingHelper<bool> m_FilterGrowable;
+        private bool m_GrowableOnly;
         private ValueBindingHelper<double> m_ScrollIndex;
         private ValueBindingHelper<double> m_MaxScrollIndex;
-        private ValueBindingHelper<int> m_BuildingCount;
-
-        // Icon generation progress (0-100, and -1 when there is nothing to do).
-        private ValueBindingHelper<int> m_IconProgress;
-        private ValueBindingHelper<int> m_IconPending;
-        private IconGeneratorSystem m_IconGenerator;
         private ValueBindingHelper<int> m_GridColumnsBinding;
+        private ValueBindingHelper<int> m_GridRowsBinding;
+        private ValueBindingHelper<bool> m_BigInstalled;
+        private ValueBindingHelper<bool> m_SelectedCanLevelUp;
+
+        private LevelUpControlSystem m_LevelUpSystem;
+        private Game.UI.InGame.SelectedInfoUISystem m_SelectedInfoSystem;
+
+        private bool m_ZoneToolWasActive;
+
+        // City demand per building (cards and zone summary), re-read while the panel is open.
+        private const int DemandRefreshFrames = 60;
+        private BuildingDemand m_Demand;
+        private int m_DemandFrames;
+        private PaletteZoneSpawnSystem m_SpawnSystem;
+        private int m_LastGrowthStage = int.MinValue;
+        private int m_LastGrowthLots = -1;
 
         protected override void OnCreate()
         {
@@ -79,36 +97,45 @@ namespace CustomZones.Systems
             m_IconGenerator = World.GetOrCreateSystemManaged<IconGeneratorSystem>();
             m_ZoneSystem = World.GetOrCreateSystemManaged<PaletteZoneSystem>();
             m_ToolSystem = World.GetOrCreateSystemManaged<ToolSystem>();
+            m_Demand = new BuildingDemand(World);
+            m_SpawnSystem = World.GetOrCreateSystemManaged<PaletteZoneSpawnSystem>();
+            m_LevelUpSystem = World.GetOrCreateSystemManaged<LevelUpControlSystem>();
+            m_SelectedInfoSystem = World.GetOrCreateSystemManaged<Game.UI.InGame.SelectedInfoUISystem>();
 
-            // ----- Value bindings -----
             m_PanelVisible = CreateBinding("PanelVisible", "SetPanelVisible", false, visible =>
             {
                 if (visible)
                 {
-                    // Lazy refresh: nothing is computed while the panel is
-                    // closed, so re-sync everything on open.
+                    // Nothing is computed while the panel is closed: re-sync on open.
+                    m_Demand.Refresh();
+                    m_DemandFrames = 0;
                     MarkBrowserDirty();
                     PushPalettes();
+                    PushCoverage();
                 }
             });
 
-            m_PainterToolActiveBinding = CreateBinding("PainterToolActive", false);
+            m_ZoneToolActive = CreateBinding("ZoneToolActive", false);
+            m_ActiveZonePalette = CreateBinding("ActiveZonePalette", string.Empty);
             m_Palettes = CreateBinding("Palettes", Array.Empty<PaletteUIEntry>());
-            m_Buildings = CreateBinding("Buildings", Array.Empty<BuildingUIEntry>());
+            m_Families = CreateBinding("Families", Array.Empty<FamilyUIEntry>());
+            m_FamilyCount = CreateBinding("FamilyCount", 0);
+            m_Coverage = CreateBinding("Coverage", new CoverageUIEntry());
+            m_ColorChoices = CreateBinding("ColorChoices", ZoneColors.Choices);
             m_Packs = CreateBinding("Packs", Array.Empty<string>());
             m_PackIcons = CreateBinding("PackIcons", Array.Empty<string>());
+            m_BigInstalled = CreateBinding("BigInstalled", false);
 
-            m_SelectedPalette = CreateBinding("SelectedPalette", "SetSelectedPalette",
-                string.Empty, id =>
-                {
-                    m_SelectedPaletteId = id;
-                    MarkBrowserDirty();
-                    Mod.Log.Info($"UI selected palette '{id}'.");
+            // "Level up" button in the header of the selected building's info panel.
+            m_SelectedCanLevelUp = CreateBinding("SelectedCanLevelUp", false);
 
-                    // The painter is re-synced to m_SelectedPaletteId every
-                    // frame in HandlePainterSelection (OnUpdate, sim thread),
-                    // so we do NOT touch the entity from this UI callback.
-                });
+            m_SelectedPalette = CreateBinding("SelectedPalette", "SetSelectedPalette", string.Empty, id =>
+            {
+                m_SelectedPaletteId = id ?? string.Empty;
+                m_ScrollRow = 0;
+                MarkBrowserDirty();
+                PushCoverage();
+            });
 
             m_ScrollIndex = CreateBinding("ScrollIndex", "SetScrollIndex", 0D, row =>
             {
@@ -116,9 +143,7 @@ namespace CustomZones.Systems
                 m_WindowDirty = true;
             });
             m_MaxScrollIndex = CreateBinding("MaxScrollIndex", 0D);
-            m_BuildingCount = CreateBinding("BuildingCount", 0);
-            m_IconProgress = CreateBinding("IconProgress", -1);
-            m_IconPending = CreateBinding("IconPending", 0);
+
             m_GridColumnsBinding = CreateBinding("GridColumns", "SetGridColumns", m_GridColumns, columns =>
             {
                 m_GridColumns = Math.Max(MinGridColumns, Math.Min(columns, MaxGridColumns));
@@ -126,89 +151,70 @@ namespace CustomZones.Systems
                 m_WindowDirty = true;
             });
 
-            // ----- Filter bindings (two-way). Category + density are NOT
-            // exposed: a palette is locked to its own zone type, so those are
-            // forced in RebuildFilteredCache, not chosen in the UI. -----
+            m_GridRowsBinding = CreateBinding("GridRows", "SetGridRows", m_GridRows, rows =>
+            {
+                m_GridRows = Math.Max(MinGridRows, Math.Min(rows, MaxGridRows));
+                m_GridRowsBinding.Value = m_GridRows;
+                m_WindowDirty = true;
+            });
+
+            // Filters (two-way). Zone type and density are forced from the
+            // selected zone in RebuildFilteredCache, never chosen in the UI.
             m_FilterLotWidth = CreateBinding("FilterLotWidth", "SetFilterLotWidth", 0,
                 v => { m_Filters.LotWidth = v; MarkBrowserDirty(); });
-            m_FilterLotDepth = CreateBinding("FilterLotDepth", "SetFilterLotDepth", 0,
-                v => { m_Filters.LotDepth = v; MarkBrowserDirty(); });
             m_FilterLevel = CreateBinding("FilterLevel", "SetFilterLevel", 0,
-                v => { m_Filters.Level = v; MarkBrowserDirty(); });
+                v => { m_Filters.Level = Math.Max(0, Math.Min(5, v)); MarkBrowserDirty(); });
             m_FilterPack = CreateBinding("FilterPack", "SetFilterPack", string.Empty,
-                v => { m_Filters.Pack = v; MarkBrowserDirty(); });
+                v => { m_Filters.Pack = v ?? string.Empty; MarkBrowserDirty(); });
             m_FilterSearch = CreateBinding("FilterSearch", "SetFilterSearch", string.Empty,
-                v => { m_Filters.Search = v; MarkBrowserDirty(); });
+                v => { m_Filters.Search = v ?? string.Empty; MarkBrowserDirty(); });
             m_FilterSelectedOnly = CreateBinding("FilterSelectedOnly", "SetFilterSelectedOnly", false,
                 v => { m_Filters.SelectedOnly = v; MarkBrowserDirty(); });
 
-            // ----- Triggers -----
+            // "Can grow now": only buildings the city currently has demand for.
+            m_FilterGrowable = CreateBinding("FilterGrowable", "SetFilterGrowable", false,
+                v => { m_GrowableOnly = v; MarkBrowserDirty(); });
+
             CreateTrigger<string, int, int>("CreatePalette", (name, category, density) =>
             {
-                var palette = PaletteStorage.Instance.Create(
-                    name, (ZoneCategory)category, (DensityType)density);
-                m_SelectedPaletteId = palette.Id;
-                m_SelectedPalette.Value = palette.Id;
+                var palette = PaletteStorage.Instance.Create(name, (ZoneCategory)category, (DensityType)density);
+                Select(palette.Id);
             });
 
             CreateTrigger<string, string>("RenamePalette",
                 (id, name) => PaletteStorage.Instance.Rename(id, name));
+
+            CreateTrigger<string, string>("SetPaletteColor",
+                (id, color) => PaletteStorage.Instance.SetColor(id, color));
 
             CreateTrigger<string>("DuplicatePalette", id =>
             {
                 var copy = PaletteStorage.Instance.Duplicate(id);
                 if (copy != null)
                 {
-                    m_SelectedPaletteId = copy.Id;
-                    m_SelectedPalette.Value = copy.Id;
+                    Select(copy.Id);
                 }
             });
 
             CreateTrigger<string>("DeletePalette", id =>
             {
                 PaletteStorage.Instance.Delete(id);
-
                 if (m_SelectedPaletteId == id)
                 {
-                    m_SelectedPaletteId = string.Empty;
-                    m_SelectedPalette.Value = string.Empty;
+                    Select(PaletteStorage.Instance.Palettes.FirstOrDefault()?.Id ?? string.Empty);
                 }
             });
 
-            // "Place this building" (FindIt-style): hands the prefab to the
-            // game's own placement tool so the user can drop it on the map and
-            // see how it actually looks. Closes our panel so the map is visible.
-            CreateTrigger<string>("PlaceBuilding", prefabName =>
-            {
-                if (!m_IndexSystem.ByName.TryGetValue(prefabName, out var entry) ||
-                    entry.PrefabEntity == Entity.Null)
-                {
-                    Mod.Log.Warn($"PlaceBuilding: '{prefabName}' is not indexed.");
-                    return;
-                }
-
-                var prefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
-
-                if (prefabSystem.TryGetPrefab<PrefabBase>(entry.PrefabEntity, out var prefab) &&
-                    m_ToolSystem.ActivatePrefabTool(prefab))
-                {
-                    m_PanelVisible.Value = false;
-                    Mod.Log.Info($"PlaceBuilding: placement tool activated for '{prefabName}'.");
-                }
-                else
-                {
-                    Mod.Log.Warn($"PlaceBuilding: could not activate the placement tool for '{prefabName}'.");
-                }
-            });
-
-            CreateTrigger<string>("ToggleBuilding", prefabName =>
+            // One building = one family at one level.
+            CreateTrigger<string, int>("ToggleFamilyLevel", (key, level) =>
             {
                 if (!string.IsNullOrEmpty(m_SelectedPaletteId))
                 {
-                    PaletteStorage.Instance.ToggleBuilding(m_SelectedPaletteId, prefabName);
+                    PaletteStorage.Instance.ToggleSelection(m_SelectedPaletteId, key, level);
                 }
             });
 
+            // "Add / remove all shown": every card on the filtered list, at the level it shows.
             CreateTrigger<bool>("SetAllVisible", allowed =>
             {
                 var palette = PaletteStorage.Instance.GetById(m_SelectedPaletteId);
@@ -217,26 +223,51 @@ namespace CustomZones.Systems
                     return;
                 }
 
-                var visible = m_Filters.Apply(m_IndexSystem.Buildings, palette)
-                    .Select(b => b.PrefabName);
-                PaletteStorage.Instance.SetBuildings(m_SelectedPaletteId, visible, allowed);
+                PaletteStorage.Instance.SetSelections(
+                    m_SelectedPaletteId,
+                    m_FilteredCache.Select(f => BuildingFamilies.SelectionKey(f.Key, ShownLevel(f, palette))).ToList(),
+                    allowed);
             });
 
-            // Dev probe: measures how fast the "photograph the real game" icon
-            // pipeline could run (see CaptureProbeSystem). Results go to the log.
-            CreateTrigger("MeasureCapture", () =>
-                World.GetOrCreateSystemManaged<CaptureProbeSystem>().Request());
+            CreateTrigger<string, bool>("SetPaletteLevelUp",
+                (id, value) => PaletteStorage.Instance.SetLevelUp(id, value));
+
+            CreateTrigger<string, bool>("SetPaletteKeepDesign",
+                (id, value) => PaletteStorage.Instance.SetKeepDesign(id, value));
+
+            // "Place this building": hands the building at the given level to the
+            // game's own placement tool, to see how it looks in the city.
+            CreateTrigger<string, int>("PlaceFamily", (key, level) =>
+            {
+                if (!m_IndexSystem.FamiliesByKey.TryGetValue(key, out var family))
+                {
+                    return;
+                }
+
+                var building = family.MemberAt(level) ?? family.Representative;
+                if (building == null || building.PrefabEntity == Entity.Null)
+                {
+                    return;
+                }
+
+                var prefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
+                if (prefabSystem.TryGetPrefab<PrefabBase>(building.PrefabEntity, out var prefab) &&
+                    m_ToolSystem.ActivatePrefabTool(prefab))
+                {
+                    m_PanelVisible.Value = false;
+                }
+            });
+
+            CreateTrigger("LevelUpSelected", () => LevelUpControlSystem.LevelUpSelectedRequested = true);
 
             CreateTrigger("ResetFilters", () =>
             {
-                m_Filters.Category = ZoneCategory.Any;
-                m_Filters.Density = DensityType.Any;
-                m_Filters.LotWidth = 0;
-                m_Filters.LotDepth = 0;
                 m_Filters.Level = 0;
+                m_Filters.LotWidth = 0;
                 m_Filters.Pack = string.Empty;
                 m_Filters.Search = string.Empty;
                 m_Filters.SelectedOnly = false;
+                m_GrowableOnly = false;
                 PushFilterValues();
                 MarkBrowserDirty();
             });
@@ -246,8 +277,13 @@ namespace CustomZones.Systems
         {
             base.OnUpdate();
 
-            HandlePainterSelection();
-            PushIconProgress();
+            HandleToolSelection();
+
+            var canLevelUp = m_LevelUpSystem.CanLevelUp(m_SelectedInfoSystem.selectedEntity);
+            if (m_SelectedCanLevelUp.Value != canLevelUp)
+            {
+                m_SelectedCanLevelUp.Value = canLevelUp;
+            }
 
             if (m_IndexSystem.Version != m_LastIndexVersion)
             {
@@ -255,28 +291,61 @@ namespace CustomZones.Systems
                 m_Packs.Value = m_IndexSystem.Packs.ToArray();
                 m_PackIcons.Value = m_IndexSystem.PackIcons.ToArray();
                 MarkBrowserDirty();
+                PushPalettes();
+                PushCoverage();
             }
 
             if (PaletteStorage.Instance.Version != m_LastStorageVersion)
             {
                 m_LastStorageVersion = PaletteStorage.Instance.Version;
+
+                // Keep a valid selection (first zone when the selected one is gone).
+                if (PaletteStorage.Instance.GetById(m_SelectedPaletteId) == null)
+                {
+                    Select(PaletteStorage.Instance.Palettes.FirstOrDefault()?.Id ?? string.Empty);
+                }
+
                 MarkBrowserDirty();
                 PushPalettes();
+                PushCoverage();
 
-                // NOTE: zone creation is intentionally NOT triggered here.
-                // It must happen in PaletteZoneSystem.OnUpdate, which runs in
-                // PrefabUpdate BEFORE the vanilla ZoneSystem so a new zone gets
-                // indexed the same frame. Calling it here (UIUpdate, after
-                // ZoneSystem already ran) would create the zone too late and it
-                // would never get a ZoneType index. PaletteZoneSystem picks up
-                // the storage-version change on its next update.
+                // Zone creation happens in PaletteZoneSystem (PrefabUpdate, before
+                // the vanilla ZoneSystem), never here.
             }
 
-            // Everything below is UI-only work: skip it entirely while the
-            // panel is closed (lazy refresh happens on open).
             if (!m_PanelVisible.Value)
             {
                 return;
+            }
+
+            if (m_BigInstalled.Value != BigIcons.IsInstalled)
+            {
+                m_BigInstalled.Value = BigIcons.IsInstalled;
+            }
+
+            // Demand changes a few times a day: refresh the badges when it does.
+            if (++m_DemandFrames >= DemandRefreshFrames)
+            {
+                m_DemandFrames = 0;
+                if (m_Demand.Refresh())
+                {
+                    m_WindowDirty = true;
+                    if (m_GrowableOnly)
+                    {
+                        MarkBrowserDirty();
+                    }
+
+                    PushCoverage();
+                }
+                else
+                {
+                    // The growth diagnosis changes with every spawn pass.
+                    var (stage, lots) = ReadGrowth(PaletteStorage.Instance.GetById(m_SelectedPaletteId));
+                    if (stage != m_LastGrowthStage || lots != m_LastGrowthLots)
+                    {
+                        PushCoverage();
+                    }
+                }
             }
 
             if (m_BrowserDirty)
@@ -294,68 +363,58 @@ namespace CustomZones.Systems
 
         private void MarkBrowserDirty() => m_BrowserDirty = true;
 
-        /// <summary>
-        /// Publishes icon-generation progress so the panel can show a bar while
-        /// the renders are still being produced. -1 means "nothing to do", which
-        /// the UI uses to hide the bar entirely.
-        /// </summary>
-        private void PushIconProgress()
+        private void Select(string id)
         {
-            var pending = m_IconGenerator.Pending;
-            var total = m_IconGenerator.Total;
-
-            var progress = pending == 0 || total == 0
-                ? -1
-                : Math.Max(0, Math.Min(100, (int)((total - pending) * 100L / total)));
-
-            if (m_IconProgress.Value != progress)
-            {
-                m_IconProgress.Value = progress;
-            }
-
-            if (m_IconPending.Value != pending)
-            {
-                m_IconPending.Value = pending;
-            }
+            m_SelectedPaletteId = id ?? string.Empty;
+            m_SelectedPalette.Value = m_SelectedPaletteId;
+            m_ScrollRow = 0;
+            MarkBrowserDirty();
+            PushCoverage();
         }
 
-        private bool m_PainterWasActive;
-
         /// <summary>
-        /// Tracks the painter tool selection. The painter always stays the
-        /// active prefab (so the other zoning tabs remain visible). We only:
-        /// (a) keep the painter pointed at the selected palette's zone,
-        /// (b) publish active state to the UI (left-panel button visibility),
-        /// (c) close the panel when the painter is deselected.
+        /// Publishes whether the zoning tool is active and which custom zone (if
+        /// any) is selected in the toolbar, and closes the panel when the player
+        /// leaves the zoning tool.
         /// </summary>
-        private void HandlePainterSelection()
+        private void HandleToolSelection()
         {
-            var painter = m_ZoneSystem.PainterZone;
-            var isActive = painter != null && m_ToolSystem.activePrefab == painter;
+            var zoneToolActive = m_ToolSystem.activeTool is ZoneToolSystem;
 
-            if (isActive)
+            var activePalette = string.Empty;
+            if (zoneToolActive &&
+                m_ToolSystem.activePrefab is ZonePrefab zone &&
+                m_ZoneSystem.TryGetPaletteIdForZone(zone, out var paletteId))
             {
-                // Keep the painter's ZoneType pointed at the selected palette.
-                m_ZoneSystem.ApplyPaletteToPainter(m_SelectedPaletteId);
+                activePalette = paletteId;
             }
-            else if (m_PainterWasActive && m_PanelVisible.Value)
+
+            if (!zoneToolActive && m_ZoneToolWasActive && m_PanelVisible.Value)
             {
-                // Left the painter tool -> close the palette panel.
                 m_PanelVisible.Value = false;
             }
 
-            m_PainterToolActiveBinding.Value = isActive;
-            m_PainterWasActive = isActive;
+            if (m_ZoneToolActive.Value != zoneToolActive)
+            {
+                m_ZoneToolActive.Value = zoneToolActive;
+            }
+
+            if (m_ActiveZonePalette.Value != activePalette)
+            {
+                m_ActiveZonePalette.Value = activePalette;
+            }
+
+            m_ZoneToolWasActive = zoneToolActive;
         }
 
         private void PushFilterValues()
         {
             m_FilterLotWidth.Value = m_Filters.LotWidth;
-            m_FilterLotDepth.Value = m_Filters.LotDepth;
             m_FilterLevel.Value = m_Filters.Level;
             m_FilterPack.Value = m_Filters.Pack;
             m_FilterSearch.Value = m_Filters.Search;
             m_FilterSelectedOnly.Value = m_Filters.SelectedOnly;
+            m_FilterGrowable.Value = m_GrowableOnly;
         }
 
         private void PushPalettes()
@@ -365,92 +424,254 @@ namespace CustomZones.Systems
                 {
                     Id = p.Id,
                     Name = p.Name,
-                    BuildingCount = p.AllowedBuildings.Count,
                     Category = (int)p.Category,
                     Density = (int)p.Density,
+                    Color = p.Color,
+                    Icon = m_ZoneSystem.GetZoneIcon(p.Id),
+                    FamilyCount = p.Families.Count,
+                    BuildingCount = SelectedBuildings(p).Count(),
+                    LevelUp = p.LevelUp,
+                    KeepDesign = p.KeepDesign,
                 })
                 .ToArray();
         }
 
+        /// <summary>The prefabs a zone may give birth to (its family-at-level selections that exist).</summary>
+        private IEnumerable<BuildingEntry> SelectedBuildings(PaletteDefinition palette)
+        {
+            foreach (var selection in palette.Families)
+            {
+                BuildingFamilies.ParseSelection(selection, out var key, out var level);
+                if (m_IndexSystem.FamiliesByKey.TryGetValue(key, out var family))
+                {
+                    var member = family.MemberAt(level);
+                    if (member != null)
+                    {
+                        yield return member;
+                    }
+                }
+            }
+        }
+
+        /// <summary>What the selected zone can grow: lot widths covered and highest level.</summary>
+        private void PushCoverage()
+        {
+            var coverage = new CoverageUIEntry();
+            var palette = PaletteStorage.Instance.GetById(m_SelectedPaletteId);
+
+            if (palette != null)
+            {
+                var widths = new SortedSet<int>();
+                var blockedGoods = new SortedSet<string>();
+                foreach (var building in SelectedBuildings(palette))
+                {
+                    coverage.GrowableBuildings++;
+                    widths.Add(Math.Min(building.LotSize.x, 6));
+                    coverage.MaxLevel = Math.Max(coverage.MaxLevel, building.Level);
+
+                    if (m_Demand.DemandFor(building, palette) >= 1)
+                    {
+                        coverage.DemandReady++;
+                    }
+                    else
+                    {
+                        var goods = BuildingDemand.NameOf(m_Demand.GoodsOf(building));
+                        if (goods.Length > 0)
+                        {
+                            blockedGoods.Add(goods);
+                        }
+                    }
+                }
+
+                coverage.CoveredWidths = widths.ToArray();
+                coverage.BlockedGoods = blockedGoods.ToArray();
+                (coverage.GrowthStage, coverage.GrowthLots) = ReadGrowth(palette);
+                m_LastGrowthStage = coverage.GrowthStage;
+                m_LastGrowthLots = coverage.GrowthLots;
+            }
+
+            m_Coverage.Value = coverage;
+        }
+
+        /// <summary>What the spawner found for the zone in its last pass (stage, free lots); -2 when unknown.</summary>
+        private (int stage, int lots) ReadGrowth(PaletteDefinition palette)
+        {
+            if (palette == null)
+            {
+                return (-2, 0);
+            }
+
+            foreach (var (index, zone) in m_ZoneSystem.GetPaletteZoneIndices())
+            {
+                if (zone.Id == palette.Id)
+                {
+                    return m_SpawnSystem.TryGetGrowth(index, out var growth)
+                        ? ((int)growth.Stage, growth.Lots)
+                        : (-2, 0);
+                }
+            }
+
+            return (-2, 0);
+        }
+
         /// <summary>
-        /// Re-applies the filters over the full index. The result stays in a
-        /// managed cache; only the visible window is serialized to the UI.
+        /// Level a card shows: the level filter when set, else the lowest level
+        /// chosen for the zone, else the lowest level the building has.
         /// </summary>
+        private int ShownLevel(BuildingFamily family, PaletteDefinition palette)
+        {
+            if (m_Filters.Level > 0 && family.HasLevel(m_Filters.Level))
+            {
+                return m_Filters.Level;
+            }
+
+            for (var level = 1; level <= 5; level++)
+            {
+                if (BuildingFamilies.IsSelected(palette, family.Key, level) && family.HasLevel(level))
+                {
+                    return level;
+                }
+            }
+
+            return family.MinLevel;
+        }
+
+        /// <summary>Re-applies the filters over all families (managed cache; only the visible rows are sent).</summary>
         private void RebuildFilteredCache()
         {
             var palette = PaletteStorage.Instance.GetById(m_SelectedPaletteId);
 
-            // A palette is locked to its area type (and density, for
-            // residential). Force those filters so the browser only ever shows
-            // buildings that belong to this palette's zone — the user can still
-            // refine by lot/level/theme/search within that set.
-            if (palette != null)
-            {
-                m_Filters.Category = palette.Category;
-                m_Filters.Density = palette.Density;
-            }
+            // A zone is locked to its type (and density, for residential): the
+            // browser only shows families that can grow in it.
+            m_Filters.Category = palette?.Category ?? ZoneCategory.Any;
+            m_Filters.Density = palette?.Density ?? DensityType.Any;
 
             m_FilteredCache.Clear();
-            m_FilteredCache.AddRange(m_Filters.Apply(m_IndexSystem.Buildings, palette));
+            if (palette != null)
+            {
+                var families = m_Filters.Apply(m_IndexSystem.Families, palette);
+                if (m_GrowableOnly)
+                {
+                    families = families.Where(f => m_Demand.DemandFor(f.MemberAt(ShownLevel(f, palette)) ?? f.Representative, palette) >= 1);
+                }
 
-            m_BuildingCount.Value = m_FilteredCache.Count;
+                m_FilteredCache.AddRange(families);
+            }
+
+            m_FamilyCount.Value = m_FilteredCache.Count;
             m_WindowDirty = true;
         }
 
-        /// <summary>
-        /// Serializes ONLY the visible rows (plus 2 overscan rows) to the UI.
-        /// With a 4x5 default grid this is at most 28 entries per push, instead of
-        /// the entire filtered list (thousands of entries).
-        /// </summary>
+        /// <summary>Sends the visible rows (+1 overscan row) of the filtered families.</summary>
         private void PushWindow()
         {
             var palette = PaletteStorage.Instance.GetById(m_SelectedPaletteId);
 
             var totalRows = Math.Ceiling(m_FilteredCache.Count / (double)m_GridColumns);
-            var maxScroll = Math.Max(0, totalRows - GridRows);
+            var maxScroll = Math.Max(0, totalRows - m_GridRows);
 
             m_ScrollRow = Math.Max(0, Math.Min(m_ScrollRow, maxScroll));
             m_ScrollIndex.Value = m_ScrollRow;
             m_MaxScrollIndex.Value = maxScroll;
 
-            var startIndex = (int)(Math.Floor(m_ScrollRow) * m_GridColumns);
-            var maxIndex = Math.Min(m_FilteredCache.Count, startIndex + (m_GridColumns * (GridRows + 2)));
-            var window = new List<BuildingUIEntry>(Math.Max(0, maxIndex - startIndex));
+            var start = (int)(Math.Floor(m_ScrollRow) * m_GridColumns);
+            var end = Math.Min(m_FilteredCache.Count, start + (m_GridColumns * (m_GridRows + 1)));
+            var window = new List<FamilyUIEntry>(Math.Max(0, end - start));
 
-            var iconGenerator = World.GetExistingSystemManaged<IconGeneratorSystem>();
-
-            for (var i = startIndex; i < maxIndex; i++)
+            for (var i = start; i < end; i++)
             {
-                var b = m_FilteredCache[i];
+                var family = m_FilteredCache[i];
+                var shownLevel = palette != null ? ShownLevel(family, palette) : family.MinLevel;
+                var shown = family.MemberAt(shownLevel) ?? family.Representative;
 
-                // On screen but still without an image: jump it to the front of
-                // the generation queue so the user never stares at a placeholder
-                // while thousands of unrelated prefabs render first.
-                if (string.IsNullOrEmpty(b.Thumbnail))
+                var selectedLevels = new List<int>();
+                for (var level = 1; level <= 5; level++)
                 {
-                    iconGenerator?.Prioritize(b.PrefabName);
+                    if (BuildingFamilies.IsSelected(palette, family.Key, level))
+                    {
+                        selectedLevels.Add(level);
+                    }
                 }
 
-                window.Add(new BuildingUIEntry
+                window.Add(new FamilyUIEntry
                 {
-                    Name = b.PrefabName,
-                    DisplayName = b.DisplayName,
-                    Thumbnail = b.Thumbnail,
-                    FallbackThumbnail = b.FallbackThumbnail,
-                    Category = (int)b.Category,
-                    Density = (int)b.Density,
-                    Level = b.Level,
-                    LotWidth = b.LotSize.x,
-                    LotDepth = b.LotSize.y,
-                    Theme = b.ThemeName,
-                    ThemeIcon = b.ThemeIcon,
-                    IsMod = b.IsMod,
-                    Packs = b.Packs,
-                    Selected = palette != null && palette.AllowedBuildings.Contains(b.PrefabName),
+                    Key = family.Key,
+                    Name = family.DisplayName,
+                    Thumbnail = ResolveThumbnail(shown),
+                    FallbackThumbnail = shown.FallbackThumbnail,
+                    LotSizes = family.LotSizes,
+                    MinLevel = family.MinLevel,
+                    MaxLevel = family.MaxLevel,
+                    MemberCount = family.Members.Count,
+                    Selected = selectedLevels.Contains(shownLevel),
+                    Theme = family.ThemeName,
+                    ThemeIcon = family.ThemeIcon,
+                    IsMod = family.IsMod,
+                    Packs = family.Packs,
+                    Picture = ResolvePicture(shown),
+                    ShownLevel = shownLevel,
+                    SelectedLevels = selectedLevels.ToArray(),
+                    LevelThumbnails = PerLevel(family, ResolveThumbnail),
+                    LevelPictures = PerLevel(family, ResolvePicture),
+                    Goods = BuildingDemand.NameOf(m_Demand.GoodsOf(shown)),
+                    HasDemand = m_Demand.DemandFor(shown, palette) >= 1,
+                    GoodsRole = m_Demand.RoleOf(shown),
                 });
             }
 
-            m_Buildings.Value = window.ToArray();
+            m_Families.Value = window.ToArray();
+        }
+
+        /// <summary>Large picture for the hover preview: BIG's full-size icon, else the card picture.</summary>
+        private string ResolvePicture(BuildingEntry building)
+        {
+            if (BigIcons.IsInstalled && BigIcons.TryGetUri(building.PrefabName, out var uri))
+            {
+                return uri;
+            }
+
+            return ResolveThumbnail(building);
+        }
+
+        /// <summary>One picture per level 1..5 of the family ("" where the level does not exist).</summary>
+        private static string[] PerLevel(BuildingFamily family, Func<BuildingEntry, string> picture)
+        {
+            var pictures = new string[5];
+            for (var i = 0; i < pictures.Length; i++)
+            {
+                var member = family.MemberAt(i + 1);
+                var url = member == null ? string.Empty : picture(member);
+                pictures[i] = string.IsNullOrEmpty(url) && member != null
+                    ? member.FallbackThumbnail ?? string.Empty
+                    : url ?? string.Empty;
+            }
+
+            return pictures;
+        }
+
+        /// <summary>
+        /// Picture of a card: BIG's thumbnail when installed (requested when
+        /// missing), otherwise the indexed thumbnail (game icon / internal render).
+        /// </summary>
+        private string ResolveThumbnail(BuildingEntry building)
+        {
+            if (BigIcons.IsInstalled)
+            {
+                if (BigIcons.TryGetThumbnailUri(building.PrefabName, out var uri))
+                {
+                    return uri;
+                }
+
+                BigIcons.RequestGeneration(building.PrefabName);
+                return building.Thumbnail ?? string.Empty;
+            }
+
+            if (string.IsNullOrEmpty(building.Thumbnail))
+            {
+                m_IconGenerator.Prioritize(building.PrefabName);
+            }
+
+            return building.Thumbnail ?? string.Empty;
         }
     }
 }

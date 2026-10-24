@@ -47,6 +47,9 @@ namespace CustomZones.Domain
         /// <summary>Stable identifier: the prefab name.</summary>
         public string PrefabName;
 
+        /// <summary>Family this prefab belongs to (see BuildingFamilies.KeyOf).</summary>
+        public string FamilyKey = string.Empty;
+
         /// <summary>Localized display name resolved for the UI.</summary>
         public string DisplayName;
 
@@ -123,7 +126,22 @@ namespace CustomZones.Domain
         /// </summary>
         public DensityType Density = DensityType.Low;
 
-        /// <summary>Prefab names allowed to spawn inside areas using this palette.</summary>
+        /// <summary>
+        /// The buildings that may be born in this zone: one entry per family and
+        /// level ("EU_ResidentialLow01|3x2@3", see BuildingFamilies.SelectionKey).
+        /// </summary>
+        public HashSet<string> Families = new();
+
+        /// <summary>Buildings in this zone may level up (false = they keep their level).</summary>
+        public bool LevelUp = true;
+
+        /// <summary>When levelling up, only become the next level of the same building (same design).</summary>
+        public bool KeepDesign = true;
+
+        /// <summary>Zone colour as "#rrggbb" (empty = pick a default).</summary>
+        public string Color = string.Empty;
+
+        /// <summary>Legacy (v0.1): individual prefab names. Migrated to <see cref="Families"/> on load.</summary>
         public HashSet<string> AllowedBuildings = new();
     }
 

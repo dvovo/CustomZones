@@ -45,6 +45,21 @@ namespace CustomZones.Systems
                     zoneData.m_ZoneFlags |= ZoneFlags.SupportLeftCorner | ZoneFlags.SupportNarrow | ZoneFlags.SupportRightCorner;
                     EntityManager.SetComponentData(entity, zoneData);
                 }
+
+                // CRITICAL for saves: the game only writes into a save the prefabs
+                // that carry a Locked component (enabled or not) or are referenced
+                // by saved entities. Zone cells store a zone number, and on load the
+                // game maps the saved numbers to the current ones through those saved
+                // zone prefabs; a zone prefab missing from the save maps to "no zone"
+                // and its painted cells are wiped. Our zones have no milestone
+                // unlock, so give them the component, disabled (= unlocked), like
+                // every vanilla zone has.
+                if (!EntityManager.HasComponent<Locked>(entity))
+                {
+                    EntityManager.AddComponent<Locked>(entity);
+                }
+
+                EntityManager.SetComponentEnabled<Locked>(entity, false);
             }
 
             entities.Dispose();

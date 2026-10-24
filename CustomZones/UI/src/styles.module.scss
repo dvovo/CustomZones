@@ -1,805 +1,1013 @@
-// CustomZones UI - floating window styled with the game's own design
-// tokens (same CSS variables FindIt uses: --panelColorNormal, --panelBlur,
-// --accentColorNormal, --panelRadius, ...). All sizes in rem: the game
-// scales 1rem ~ 1px at 1080p.
+// Custom Zones editor - side panel styled with the game's own design tokens
+// (--panelColorNormal, --sectionBackgroundColor, --accentColorNormal,
+// --fontSize*, ...). All sizes in rem: the game scales 1rem ~ 1px at 1080p.
 
-// ---------------------------------------------------------------- toolbar
-.toolbarButton {
-  width: 36rem;
-  height: 36rem;
-  margin-left: 6rem;
-}
-
-.toolbarButtonActive {
-  composes: toolbarButton;
-  background-color: var(--accentColorNormal);
-  border-radius: 4rem;
-}
-
-.toolbarButtonIcon {
-  width: 24rem;
-  height: 24rem;
-}
-
-// Contextual button shown in the zone tool's left options panel area while
-// the palette painter is active. Anchored to the left edge, vertically
-// centred, so it sits next to the vanilla Theme/Package/Tools options.
-.toolPanelButton {
+// ------------------------------------------------------------------ panel
+.panel {
   position: absolute;
-  left: 6rem;
-  bottom: 220rem;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  padding: 6rem 12rem 6rem 8rem;
-  background-color: var(--panelColorNormal);
-  border-radius: var(--panelRadius, 4rem);
-  color: var(--textColor);
-}
-
-.toolPanelButtonActive {
-  composes: toolPanelButton;
-  background-color: var(--accentColorNormal);
-}
-
-.toolPanelButtonIcon {
-  width: 28rem;
-  height: 28rem;
-  margin-right: 8rem;
-}
-
-.toolPanelButtonLabel {
-  font-size: 14rem;
-  white-space: nowrap;
-}
-
-// ---------------------------------------------------------------- window
-.window {
-  position: absolute;
-  top: 110rem;
-  left: 60rem;
-  width: 860rem;
-  height: 660rem;
-  min-width: 720rem;
-  min-height: 520rem;
+  top: 64rem;
+  right: 10rem;
+  bottom: 72rem;
+  width: 520rem;
   display: flex;
   flex-direction: column;
-  background-color: var(--panelColorNormal);
-  backdrop-filter: var(--panelBlur);
-  border-radius: var(--panelRadius);
-  box-shadow: 0 4rem 16rem rgba(0, 0, 0, 0.5);
-  overflow: hidden;
   pointer-events: auto;
 }
 
-.header {
+.panelContent {
+  flex: 1;
+  min-height: 0;
   display: flex;
-  align-items: center;
-  height: 38rem;
-  padding: 0 6rem 0 14rem;
-  background: linear-gradient(
-    to right,
-    var(--panelGradientStart),
-    var(--panelGradientEnd)
-  );
-  cursor: move;
+  flex-direction: column;
+  padding: 6rem 8rem 8rem 8rem;
 }
 
-.headerIcon {
-  width: 22rem;
-  height: 22rem;
+.title {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.titleIcon {
+  width: 24rem;
+  height: 24rem;
   margin-right: 8rem;
 }
 
-.headerTitle {
-  flex: 1;
-  font-size: 15rem;
-  font-weight: bold;
-  color: var(--textColor);
-  text-transform: uppercase;
-  letter-spacing: 1rem;
+// ---------------------------------------------------------------- sections
+.section {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  margin-bottom: 6rem;
+  padding: 6rem 8rem 8rem 8rem;
+  background-color: var(--sectionBackgroundColor);
+  border-top-left-radius: 4rem;
+  border-top-right-radius: 4rem;
+  border-bottom-right-radius: 4rem;
+  border-bottom-left-radius: 4rem;
 }
 
-.closeButton {
-  width: 30rem;
-  height: 30rem;
-
-  img {
-    width: 18rem;
-    height: 18rem;
-  }
-}
-
-.body {
+.sectionHeader {
   display: flex;
   flex-direction: row;
-  flex: 1;
-  min-height: 0;
-}
-
-// ---------------------------------------------------------------- sidebar
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  width: 230rem;
-  padding: 8rem;
-  background-color: var(--panelColorDark);
-  border-right: 1rem solid var(--menuControlBorder);
-}
-
-.newPaletteButton {
-  display: flex;
   align-items: center;
-  justify-content: center;
-  height: 32rem;
-  margin-bottom: 8rem;
-  border-radius: 4rem;
-  background-color: var(--accentColorNormal);
-
-  img {
-    width: 16rem;
-    height: 16rem;
-    margin-right: 6rem;
-  }
-
-  span {
-    font-size: 13rem;
-    color: var(--textColor);
-  }
-}
-
-.paletteList {
-  flex: 1;
-}
-
-.paletteItem {
-  position: relative;
-  padding: 8rem 10rem;
-  margin-bottom: 6rem;
-  border-radius: 4rem;
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1rem solid transparent;
-  cursor: pointer;
-
-  &:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-  }
-}
-
-.paletteItemSelected {
-  composes: paletteItem;
-  border-color: var(--accentColorNormal);
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.createForm {
-  display: flex;
-  flex-direction: column;
-  padding: 8rem;
-  margin-bottom: 8rem;
-  background-color: rgba(255, 255, 255, 0.06);
-  border-radius: 4rem;
-}
-
-.createLabel {
-  font-size: 12rem;
-  color: var(--textColorDim);
-  margin-bottom: 6rem;
-}
-
-.createOption {
-  justify-content: flex-start;
-  padding: 6rem 10rem;
+  min-height: 28rem;
   margin-bottom: 4rem;
-  background-color: rgba(255, 255, 255, 0.08);
-  border-radius: 4rem;
-  color: var(--textColor);
 }
 
-.createCancel {
-  justify-content: center;
-  padding: 4rem;
-  margin-top: 2rem;
-  color: var(--textColorDim);
-}
-
-.paletteSelect {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  width: 100%;
-  padding: 0;
-  background-color: transparent;
-}
-
-.paletteName {
-  font-size: 14rem;
-  color: var(--textColor);
-  margin-bottom: 2rem;
-}
-
-.paletteMeta {
-  font-size: 11rem;
-  color: var(--textColorDim);
-}
-
-.paletteActions {
-  display: flex;
-  flex-direction: row;
-  margin-top: 6rem;
-
-  button {
-    width: 24rem;
-    height: 24rem;
-    margin-right: 4rem;
-  }
-
-  img {
-    width: 14rem;
-    height: 14rem;
-  }
-}
-
-.renameInput {
-  width: 100%;
-  height: 26rem;
-  padding: 0 6rem;
-  font-size: 13rem;
-  color: var(--textColor);
-  background-color: rgba(0, 0, 0, 0.4);
-  border: 1rem solid var(--accentColorNormal);
-  border-radius: 3rem;
-}
-
-// ---------------------------------------------------------------- main
-.main {
-  display: flex;
-  flex-direction: column;
+.sectionTitle {
   flex: 1;
-  min-width: 0;
-}
-
-.emptyState {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 30rem;
-  font-size: 14rem;
-  color: var(--textColorDim);
-  text-align: center;
-}
-
-// ---------------------------------------------------------------- editor
-.editor {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  padding: 8rem 10rem;
-}
-
-// Modern FindIt-style filter block: a bordered card holding the search, the
-// width/depth/level steppers and the asset-pack icon row.
-.filterPanel {
-  display: flex;
-  flex-direction: column;
-  padding: 8rem 10rem;
-  margin-bottom: 8rem;
-  background-color: rgba(0, 0, 0, 0.22);
-  border: 1rem solid var(--menuControlBorder);
-  border-radius: 6rem;
-}
-
-.filterHeader {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  margin-bottom: 8rem;
-}
-
-.filterHeaderIcon {
-  width: 16rem;
-  height: 16rem;
-  margin-right: 6rem;
-  opacity: 0.85;
-}
-
-.filterHeaderTitle {
-  flex: 1;
-  font-size: 12rem;
+  font-size: var(--fontSizeS);
   font-weight: bold;
   text-transform: uppercase;
-  letter-spacing: 1rem;
   color: var(--textColorDim);
 }
 
-.iconBtn {
-  width: 26rem;
-  height: 26rem;
-  border-radius: 4rem;
-
-  img {
-    width: 16rem;
-    height: 16rem;
-  }
-
-  &:hover {
-    background-color: rgba(255, 255, 255, 0.12);
-  }
-}
-
-// ----- search -----
-.searchWrap {
+.headerActions {
   display: flex;
   flex-direction: row;
   align-items: center;
-  height: 30rem;
-  padding: 0 6rem;
-  margin-bottom: 8rem;
-  background-color: rgba(0, 0, 0, 0.4);
-  border: 1rem solid var(--menuControlBorder);
-  border-radius: 6rem;
-
-  &:focus-within {
-    border-color: var(--accentColorNormal);
-  }
 }
 
-.searchIcon {
+.headerButton {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 26rem;
+  padding: 0 10rem;
+  margin-left: 4rem;
+  font-size: var(--fontSizeXS);
+  color: var(--textColor);
+}
+
+.dangerButton {
+  composes: headerButton;
+  background-color: rgba(220, 60, 60, 0.85);
+}
+
+.buttonIcon {
   width: 16rem;
   height: 16rem;
   margin-right: 6rem;
+}
+
+.iconButton {
+  width: 28rem;
+  height: 28rem;
+  padding: 5rem;
+  margin-left: 4rem;
+
+  img {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.hint {
+  font-size: var(--fontSizeXS);
+  color: var(--textColorDimmest);
+  opacity: 0.8;
+  margin: 2rem 0 4rem 0;
+}
+
+.inlineIcon {
+  width: 20rem;
+  height: 20rem;
+  margin-right: 6rem;
+}
+
+.inlineIconDim {
+  composes: inlineIcon;
   opacity: 0.6;
 }
 
-.searchInput {
-  flex: 1;
-  height: 100%;
-  font-size: 13rem;
-  color: var(--textColor);
+// --------------------------------------------------------------- zone list
+.zoneList {
+  display: flex;
+  flex-direction: column;
+  max-height: 168rem;
+  overflow-y: auto;
+}
+
+.zoneRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 40rem;
+  padding: 4rem 8rem;
+  margin-bottom: 2rem;
+  border-radius: 3rem;
   background-color: transparent;
-  border: none;
+  color: var(--textColor);
 }
 
-.searchClear {
-  width: 22rem;
-  height: 22rem;
-
-  img {
-    width: 14rem;
-    height: 14rem;
-    opacity: 0.7;
-  }
+.zoneRowSelected {
+  composes: zoneRow;
+  background-color: var(--selectedColor);
 }
 
-// ----- width / depth / level steppers -----
-.stepperRow {
+.zoneRowIcon {
+  width: 32rem;
+  height: 32rem;
+  margin-right: 8rem;
+}
+
+.zoneRowText {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.zoneRowName {
+  font-size: var(--fontSizeS);
+  font-weight: bold;
+}
+
+.zoneRowMeta {
+  font-size: var(--fontSizeXS);
+  opacity: 0.75;
+}
+
+.zoneRowSwatch {
+  width: 14rem;
+  height: 14rem;
+  border-radius: 50%;
+  margin-left: 8rem;
+  border: 2rem solid rgba(255, 255, 255, 0.6);
+}
+
+// --------------------------------------------------------------- new zone
+.typeGrid {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
+}
+
+.typeButton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 116rem;
+  height: 96rem;
+  margin: 0 6rem 6rem 0;
+  padding: 8rem 4rem;
+  border-radius: 4rem;
+  background-color: rgba(255, 255, 255, 0.06);
+  color: var(--textColor);
+}
+
+.typeIcon {
+  width: 44rem;
+  height: 44rem;
   margin-bottom: 6rem;
 }
 
-.stepper {
+.typeLabel {
+  font-size: var(--fontSizeXS);
+  text-align: center;
+}
+
+// ----------------------------------------------------------- zone settings
+.field {
   display: flex;
-  flex-direction: column;
-  margin-right: 10rem;
+  flex-direction: row;
+  align-items: center;
+  min-height: 32rem;
   margin-bottom: 4rem;
 }
 
-.stepperLabel {
-  font-size: 11rem;
+.fieldLabel {
+  width: 110rem;
+  flex-shrink: 0;
+  font-size: var(--fontSizeXS);
   color: var(--textColorDim);
-  margin-bottom: 3rem;
+  opacity: 0.8;
 }
 
-.stepperControl {
+.fieldValue {
   display: flex;
   flex-direction: row;
   align-items: center;
-  height: 28rem;
-  background-color: rgba(0, 0, 0, 0.35);
-  border-radius: 5rem;
-  overflow: hidden;
-}
-
-.stepperBtn {
-  width: 26rem;
-  height: 28rem;
-
-  img {
-    width: 12rem;
-    height: 12rem;
-  }
-
-  &:hover {
-    background-color: var(--accentColorNormal);
-  }
-}
-
-.stepperBtnDim {
-  composes: stepperBtn;
-
-  img {
-    opacity: 0.25;
-  }
-
-  &:hover {
-    background-color: transparent;
-  }
-}
-
-.stepperValue {
-  min-width: 46rem;
-  text-align: center;
-  font-size: 12rem;
+  font-size: var(--fontSizeS);
   color: var(--textColor);
 }
 
-// ----- icon filter row (asset packs) -----
-.iconFilterRow {
+.textInput {
+  flex: 1;
+  height: 28rem;
+  padding: 0 8rem;
+  border-radius: 3rem;
+  border: 1rem solid rgba(255, 255, 255, 0.12);
+  background-color: rgba(0, 0, 0, 0.25);
+  color: var(--textColor);
+  font-size: var(--fontSizeS);
+  font-family: var(--fontFamily);
+}
+
+.swatches {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+.swatch {
+  width: 22rem;
+  height: 22rem;
+  margin: 2rem 6rem 2rem 0;
+  border-radius: 50%;
+  border: 2rem solid rgba(255, 255, 255, 0.25);
+}
+
+.swatchSelected {
+  composes: swatch;
+  border-top-width: 3rem;
+  border-top-style: solid;
+  border-top-color: var(--accentColorNormal);
+  border-right-width: 3rem;
+  border-right-style: solid;
+  border-right-color: var(--accentColorNormal);
+  border-bottom-width: 3rem;
+  border-bottom-style: solid;
+  border-bottom-color: var(--accentColorNormal);
+  border-left-width: 3rem;
+  border-left-style: solid;
+  border-left-color: var(--accentColorNormal);
+}
+
+.coverage {
+  margin-top: 2rem;
+  padding-top: 6rem;
+  border-top-width: 1rem;
+  border-top-style: solid;
+  border-top-color: var(--dividerColor);
+}
+
+.coverageLine {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: var(--fontSizeXS);
+  color: var(--textColor);
+}
+
+.widthChips {
+  display: flex;
+  flex-direction: row;
+  margin-left: 6rem;
+}
+
+.widthChip {
+  min-width: 22rem;
+  height: 18rem;
+  margin-right: 3rem;
+  padding: 0 3rem;
+  border-radius: 3rem;
+  background-color: var(--accentColorNormal);
+  color: var(--textColorDark);
+  font-size: var(--fontSizeXS);
+  font-weight: bold;
+  text-align: center;
+}
+
+.widthChipMissing {
+  composes: widthChip;
+  background-color: rgba(255, 255, 255, 0.12);
+  color: var(--textColorDim);
+  opacity: 0.6;
+}
+
+.warning {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  font-size: var(--fontSizeXS);
+  color: var(--warningColor);
+}
+
+// ---------------------------------------------------------------- browser
+.browser {
+  composes: section;
+  position: relative;
+  flex: 1;
+  flex-shrink: 1;
+  min-height: 0;
+  margin-bottom: 0;
+}
+
+// 100rem wide, invisible: tells FamilyBrowser how many px one rem is.
+.remProbe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100rem;
+  height: 1rem;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.searchBox {
+  position: relative;
   display: flex;
   flex-direction: row;
   align-items: center;
   margin-bottom: 6rem;
 }
 
-.iconFilterLabel {
-  width: 60rem;
-  font-size: 11rem;
+.searchPlaceholder {
+  position: absolute;
+  left: 10rem;
+  top: 5rem;
+  font-size: var(--fontSizeS);
   color: var(--textColorDim);
+  opacity: 0.45;
+  pointer-events: none;
 }
 
-.chipGroup {
+.searchClear {
+  width: 24rem;
+  height: 24rem;
+  padding: 5rem;
+  margin-left: -30rem;
+
+  img {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.filterRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.dropdown {
+  min-width: 112rem;
+  margin: 0 6rem 6rem 0;
+}
+
+.checkboxField {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin: 0 6rem 6rem 4rem;
+  font-size: var(--fontSizeXS);
+  color: var(--textColor);
+
+  > * {
+    margin-right: 6rem;
+  }
+}
+
+.checkboxFieldDisabled {
+  composes: checkboxField;
+  opacity: 0.45;
+}
+
+.levelOptions {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  padding: 2rem;
-  background-color: rgba(0, 0, 0, 0.25);
-  border-radius: 5rem;
-}
+  align-items: center;
 
-.packChip {
-  width: 30rem;
-  height: 30rem;
-  border-radius: 4rem;
-
-  img {
-    width: 20rem;
-    height: 20rem;
-  }
-
-  &:hover {
-    background-color: rgba(255, 255, 255, 0.12);
+  > * {
+    margin-bottom: 0;
   }
 }
 
-.packChipActive {
-  composes: packChip;
-  background-color: var(--accentColorNormal);
-}
-
-// ----- selection actions -----
-.actionRow {
+.resultsRow {
   display: flex;
   flex-direction: row;
   align-items: center;
-  margin-top: 2rem;
+  flex-shrink: 0;
+  margin-bottom: 6rem;
 }
 
-.actionChip {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  height: 28rem;
-  padding: 0 10rem;
-  margin-right: 6rem;
-  font-size: 12rem;
-  color: var(--textColor);
-  background-color: rgba(255, 255, 255, 0.06);
-  border-radius: 5rem;
-
-  img {
-    width: 15rem;
-    height: 15rem;
-    margin-right: 5rem;
-  }
-
-  &:hover {
-    background-color: rgba(255, 255, 255, 0.12);
-  }
-}
-
-.actionChipActive {
-  composes: actionChip;
-  background-color: var(--accentColorNormal);
-}
-
-.resultCount {
-  margin-left: auto;
-  font-size: 12rem;
-  color: var(--textColorDim);
-}
-
-// ------------------------------------------------- icon generation progress
-.iconProgress {
-  display: flex;
-  flex-direction: column;
-  padding: 6rem 10rem 8rem 10rem;
-  margin-bottom: 8rem;
-  background-color: rgba(0, 0, 0, 0.25);
-  border: 1rem solid var(--menuControlBorder);
-  border-radius: 6rem;
-}
-
-.iconProgressLabel {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 5rem;
-  font-size: 12rem;
-  color: var(--textColor);
-}
-
-.iconProgressCount {
-  font-size: 11rem;
-  color: var(--textColorDim);
-}
-
-.iconProgressTrack {
-  height: 6rem;
-  background-color: rgba(0, 0, 0, 0.45);
-  border-radius: 3rem;
-  overflow: hidden;
-}
-
-.iconProgressFill {
-  height: 100%;
-  background-color: var(--accentColorNormal);
-  border-radius: 3rem;
-}
-
-// ------------------------------------------------------- virtualized grid
-.gridArea {
-  display: flex;
-  flex-direction: row;
+.resultsCount {
   flex: 1;
-  min-height: 0;
+  font-size: var(--fontSizeXS);
+  color: var(--textColorDim);
+  opacity: 0.8;
+}
+
+// Height set inline by FamilyBrowser (rows that fit down to the panel's edge).
+.gridArea {
+  flex: none;
+  display: flex;
+  flex-direction: row;
 }
 
 .grid {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
   align-content: flex-start;
-  flex: 1;
-  overflow: hidden; // scrolling is virtual, driven by C#
+  overflow: hidden;
 }
 
+.emptyGrid {
+  width: 100%;
+  padding: 24rem;
+  text-align: center;
+  font-size: var(--fontSizeS);
+  color: var(--textColorDim);
+  opacity: 0.7;
+}
+
+// Card footprint = 112 + 8 margin = 120 wide, 144 + 8 = 152 high
+// (CARD_WIDTH / CARD_HEIGHT in FamilyBrowser.tsx).
 .card {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: 150rem;
-  height: 178rem;
-  margin: 0 8rem 10rem 0;
+  width: 112rem;
+  height: 144rem;
+  margin: 0 8rem 8rem 0;
+  padding: 4rem;
   border-radius: 4rem;
-  background-color: rgba(0, 0, 0, 0.25);
-  border: 1rem solid transparent;
-  cursor: pointer;
-  overflow: hidden;
+  border: 2rem solid transparent;
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--textColor);
 
   &:hover {
-    border-color: var(--textColorDim);
+    background-color: var(--hoverColor);
   }
 }
 
 .cardSelected {
   composes: card;
-  border-color: var(--accentColorNormal);
+  border-top-width: 2rem;
+  border-top-style: solid;
+  border-top-color: var(--accentColorNormal);
+  border-right-width: 2rem;
+  border-right-style: solid;
+  border-right-color: var(--accentColorNormal);
+  border-bottom-width: 2rem;
+  border-bottom-style: solid;
+  border-bottom-color: var(--accentColorNormal);
+  border-left-width: 2rem;
+  border-left-style: solid;
+  border-left-color: var(--accentColorNormal);
+  background-color: rgba(75, 195, 241, 0.18);
+}
+
+.cardPicture {
+  position: relative;
+  width: 100rem;
+  height: 72rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cardImage {
+  max-width: 100rem;
+  max-height: 72rem;
+}
+
+.cardFallback {
+  width: 44rem;
+  height: 44rem;
+  opacity: 0.55;
+}
+
+.cardCheck {
+  position: absolute;
+  top: 2rem;
+  left: 2rem;
+  width: 22rem;
+  height: 22rem;
+  padding: 3rem;
+  border-radius: 50%;
+  background-color: var(--accentColorNormal);
+}
+
+.cardBadges {
+  position: absolute;
+  bottom: 2rem;
+  left: 2rem;
+  display: flex;
+  flex-direction: row;
+}
+
+.cardBadge {
+  width: 18rem;
+  height: 18rem;
+  margin-right: 3rem;
+}
+
+.cardPlace {
+  position: absolute;
+  top: 2rem;
+  right: 2rem;
+  width: 24rem;
+  height: 24rem;
+  padding: 4rem;
+  border-radius: 3rem;
+  background-color: rgba(0, 0, 0, 0.35);
+  opacity: 0.7;
+
+  &:hover {
+    opacity: 1;
+    background-color: var(--accentColorNormal);
+  }
+
+  img {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+.cardName {
+  margin-top: 3rem;
+  font-size: var(--fontSizeXS);
+  font-weight: bold;
+  line-height: 1.15;
+  max-height: 28rem;
+  overflow: hidden;
+}
+
+.cardMeta {
+  font-size: var(--fontSizeXS);
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+// Levels L1-L5 under the picture: dim = the building has no such level,
+// outlined = the level shown, filled = the level is chosen for the zone.
+.levelStrip {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  margin-top: 3rem;
+}
+
+.levelPill {
+  width: 18rem;
+  height: 14rem;
+  border-radius: 3rem;
+  border: 1rem solid rgba(255, 255, 255, 0.25);
+  background-color: rgba(255, 255, 255, 0.06);
+  font-size: 10rem;
+  font-weight: bold;
+  line-height: 12rem;
+  text-align: center;
+  color: var(--textColor);
+
+  &:hover {
+    border-top-color: var(--accentColorLight);
+    border-right-color: var(--accentColorLight);
+    border-bottom-color: var(--accentColorLight);
+    border-left-color: var(--accentColorLight);
+  }
+}
+
+.levelPillShown {
+  composes: levelPill;
+  border-top-width: 1rem;
+  border-top-style: solid;
+  border-top-color: var(--accentColorLight);
+  border-right-width: 1rem;
+  border-right-style: solid;
+  border-right-color: var(--accentColorLight);
+  border-bottom-width: 1rem;
+  border-bottom-style: solid;
+  border-bottom-color: var(--accentColorLight);
+  border-left-width: 1rem;
+  border-left-style: solid;
+  border-left-color: var(--accentColorLight);
+}
+
+.levelPillChosen {
+  composes: levelPill;
+  background-color: var(--accentColorNormal);
+  color: var(--textColorDark);
+}
+
+.levelPillChosenShown {
+  composes: levelPillChosen;
+  border: 1rem solid #ffffff;
+}
+
+.levelPillMissing {
+  composes: levelPill;
+  opacity: 0.2;
+}
+
+.cardTooltip {
+  display: flex;
+  flex-direction: column;
+  font-size: var(--fontSizeXS);
+}
+
+.cardTooltipTitle {
+  font-weight: bold;
+  font-size: var(--fontSizeS);
+  margin-bottom: 4rem;
+}
+
+.cardTooltipHint {
+  margin-top: 4rem;
+  opacity: 0.7;
+}
+
+// ------------------------------------------------------------- scroll bar
+.scrollTrack {
+  position: relative;
+  width: 8rem;
+  margin-left: 4rem;
+  border-radius: 4rem;
   background-color: rgba(255, 255, 255, 0.08);
 }
 
-// Square (1:1) building image: the card is 150rem wide, so a 150rem-tall thumb
-// is a perfect square. object-fit: contain keeps the render undistorted on both
-// axes (letterboxed inside the square, never stretched).
-.cardThumb {
-  width: 100%;
-  height: 148rem;
-  flex: 0 0 auto;
-  object-fit: contain;
-}
-
-// Name fills the strip below the square image (was the empty size-badge space).
-.cardLabel {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: center;
-  padding: 0 6rem;
-  font-size: 11rem;
-  color: var(--textColor);
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-// Procedural icon: the guaranteed last-resort tile for buildings that have no
-// image at all (neither a shipped icon nor a generated render). Built from the
-// building's own data so every one of them still looks distinct.
-.cardProcedural {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 148rem;
-  flex: 0 0 auto;
-}
-
-.cardProceduralText {
-  font-size: 34rem;
-  font-weight: bold;
-  letter-spacing: 2rem;
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.cardProceduralSub {
-  margin-top: 4rem;
-  font-size: 11rem;
-  color: rgba(255, 255, 255, 0.75);
-}
-
-// Top-left cluster: zone icon + lot size, overlaid on the thumbnail.
-.cardTopLeft {
-  position: absolute;
-  top: 3rem;
-  left: 3rem;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-}
-
-.cardSize {
-  margin-left: 3rem;
-  padding: 1rem 4rem;
-  font-size: 10rem;
-  color: var(--textColor);
-  background-color: rgba(0, 0, 0, 0.55);
-  border-radius: 3rem;
-}
-
-// Descriptor badge cluster (FindIt style): theme flag, asset-pack flags and
-// the mod flag, STACKED vertically down the top-right corner of the card.
-.cardDescriptors {
-  position: absolute;
-  top: 3rem;
-  right: 3rem;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-}
-
-.cardDescIcon {
-  width: 18rem;
-  height: 18rem;
-  margin-bottom: 3rem;
-  padding: 2rem;
-  border-radius: 3rem;
-  background-color: rgba(0, 0, 0, 0.55);
-  object-fit: contain;
-}
-
-// "Place on the map" button: bottom-LEFT of the thumbnail, opposite the
-// selected tick so the two never collide.
-.cardPlace {
-  position: absolute;
-  top: 122rem;
-  left: 4rem;
-}
-
-.cardPlaceButton {
-  width: 26rem;
-  height: 26rem;
-  border-radius: 4rem;
-  background-color: rgba(0, 0, 0, 0.55);
-
-  img {
-    width: 16rem;
-    height: 16rem;
-  }
-
-  &:hover {
-    background-color: var(--accentColorNormal);
-  }
-}
-
-// Selected tick: bottom-right of the square thumbnail so it never overlaps the
-// descriptor badges in the top-right corner.
-.cardCheck {
-  position: absolute;
-  top: 126rem;
-  right: 4rem;
-  width: 18rem;
-  height: 18rem;
-}
-
-// Zone icon (child of .cardTopLeft) so you can tell which vanilla zone a
-// building belongs to at a glance.
-.cardZoneBadge {
-  width: 18rem;
-  height: 18rem;
-  padding: 2rem;
-  border-radius: 3rem;
-  background-color: rgba(0, 0, 0, 0.55);
-  object-fit: contain;
-}
-
-// custom scrollbar (virtual)
-.scrollbar {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 18rem;
-  margin-left: 4rem;
-}
-
-.scrollArrow {
-  width: 18rem;
-  height: 18rem;
-
-  img {
-    width: 12rem;
-    height: 12rem;
-  }
-}
-
-.scrollTrack {
-  position: relative;
-  flex: 1;
+.scrollTrackEmpty {
   width: 8rem;
-  margin: 4rem 0;
-  background-color: rgba(0, 0, 0, 0.35);
-  border-radius: 4rem;
+  margin-left: 4rem;
 }
 
 .scrollThumb {
   position: absolute;
   left: 0;
   width: 8rem;
+  border-radius: 4rem;
   background-color: var(--accentColorNormal);
-  border-radius: 4rem;
-  cursor: pointer;
 }
 
-.hintBar {
-  margin: 8rem 10rem 0 10rem;
-  padding: 6rem 10rem;
-  font-size: 11rem;
-  color: var(--textColorDim);
-  background-color: rgba(0, 0, 0, 0.25);
-  border-radius: 4rem;
-}
+// ---------------------------------------------------------- large preview (magnifier)
 
-.resizeHandle {
+.previewBackdrop {
   position: absolute;
+  top: 0;
+  left: 0;
   right: 0;
   bottom: 0;
-  width: 20rem;
-  height: 20rem;
-  cursor: nwse-resize;
+  background-color: rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
 
-  &::after {
-    content: "";
-    position: absolute;
-    right: 5rem;
-    bottom: 5rem;
-    width: 8rem;
-    height: 8rem;
-    border-right: 2rem solid var(--textColorDim);
-    border-bottom: 2rem solid var(--textColorDim);
+.preview {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 760rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 14rem 18rem 16rem 18rem;
+  border-top-left-radius: 4rem;
+  border-top-right-radius: 4rem;
+  border-bottom-right-radius: 4rem;
+  border-bottom-left-radius: 4rem;
+  background-color: var(--panelColorDark);
+  color: var(--textColor);
+  pointer-events: auto;
+}
+
+.previewHeader {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.previewHeading {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.previewTitle {
+  font-size: var(--fontSizeL);
+  font-weight: bold;
+}
+
+.previewMeta {
+  margin-top: 2rem;
+  font-size: var(--fontSizeXS);
+  opacity: 0.75;
+}
+
+.previewPicture {
+  height: 480rem;
+  margin: 10rem 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4rem;
+  background-color: var(--sectionBackgroundColor);
+}
+
+.previewImage {
+  max-width: 720rem;
+  max-height: 470rem;
+}
+
+.previewActions {
+  margin-top: 12rem;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.primaryButton {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 6rem 14rem;
+  border-radius: 3rem;
+  background-color: var(--accentColorNormal);
+  color: var(--textColorDark, #1e2125);
+  font-weight: bold;
+
+  &:hover {
+    background-color: var(--accentColorLight);
   }
+
+  img {
+    filter: brightness(0.15);
+  }
+}
+
+.previewLevels {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+}
+
+.previewLevel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 120rem;
+  margin: 0 5rem;
+  padding: 4rem 0;
+  border-radius: 4rem;
+  font-size: var(--fontSizeXS);
+  font-weight: bold;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.previewLevelMissing {
+  composes: previewLevel;
+  opacity: 0.3;
+
+  &:hover {
+    background-color: transparent;
+  }
+}
+
+.previewLevelShown {
+  composes: previewLevel;
+  color: var(--accentColorLight);
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.previewLevelChosen {
+  composes: previewLevel;
+
+  span {
+    padding: 0 6rem;
+    border-radius: 3rem;
+    background-color: var(--accentColorNormal);
+    color: var(--textColorDark);
+  }
+}
+
+.previewLevelShownChosen {
+  composes: previewLevelChosen;
+  color: var(--accentColorLight);
+  background-color: rgba(255, 255, 255, 0.12);
+}
+
+.previewLevelImage {
+  width: 104rem;
+  height: 80rem;
+  margin-bottom: 2rem;
+}
+
+.previewHint {
+  margin-top: 8rem;
+  font-size: var(--fontSizeXS);
+  opacity: 0.7;
+}
+
+// ---------------------------------------------------------- selected building: level-up button
+
+.actionsRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.actionsRowOriginal {
+  flex: 1;
+}
+
+.levelUpButtonSlot {
+  padding: 5rem 10rem 5rem 0;
+}
+
+// ---------------------------------------------------------- demand
+
+// Card warning (bottom right of the picture), only when the building cannot grow now.
+.demandBadgeBlocked {
+  position: absolute;
+  bottom: 2rem;
+  right: 2rem;
+  padding: 3rem;
+  border-top-left-radius: 3rem;
+  border-top-right-radius: 3rem;
+  border-bottom-right-radius: 3rem;
+  border-bottom-left-radius: 3rem;
+  background-color: rgba(190, 40, 40, 0.85);
+}
+
+.demandBadgeWarning {
+  width: 14rem;
+  height: 14rem;
+}
+
+// "6x6 · [icon] Lodging" under the card name.
+.cardMetaRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  font-size: var(--fontSizeXS);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.cardMetaLot {
+  opacity: 0.7;
+  margin-right: 3rem;
+}
+
+.cardGoodsIcon {
+  width: 12rem;
+  height: 12rem;
+  margin-right: 2rem;
+}
+
+.cardGoods {
+  opacity: 0.85;
+  overflow: hidden;
+}
+
+.cardGoodsBlocked {
+  overflow: hidden;
+  color: rgb(255, 110, 100);
+}
+
+.sectionTitleRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.helpIcon {
+  width: 16rem;
+  height: 16rem;
+  margin-left: 6rem;
+  opacity: 0.75;
+
+  &:hover {
+    opacity: 1;
+  }
+}
+
+.helpTooltip {
+  display: flex;
+  flex-direction: column;
+  max-width: 360rem;
+}
+
+.helpLine {
+  margin-bottom: 4rem;
+}
+
+.demandWarning {
+  composes: warning;
+  flex-wrap: wrap;
+  margin-top: 4rem;
+}
+
+.demandHint {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 4rem;
+  font-size: var(--fontSizeXS);
+  color: var(--textColorDim);
+}
+
+.goodsList {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-left: 6rem;
+}
+
+.goodsIcon {
+  width: 18rem;
+  height: 18rem;
+  margin-right: 4rem;
+}
+
+.previewDemand {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-top: 6rem;
+  font-size: var(--fontSizeXS);
+  opacity: 0.85;
+}
+
+.previewDemandBlocked {
+  composes: previewDemand;
+  opacity: 1;
+  color: rgb(255, 110, 100);
+}
+
+// ---------------------------------------------------------- growth status
+
+.growthOk {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  margin-top: 4rem;
+  font-size: var(--fontSizeXS);
+  color: rgb(140, 220, 120);
+}
+
+.growthProblem {
+  composes: warning;
+  margin-top: 4rem;
+}
+
+.growthNeutral {
+  margin-top: 4rem;
+  font-size: var(--fontSizeXS);
+  color: var(--textColorDim);
 }

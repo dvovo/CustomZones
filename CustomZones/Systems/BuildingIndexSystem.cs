@@ -23,6 +23,7 @@ namespace CustomZones.Systems
     using Unity.Collections;
     using Unity.Entities;
     using CustomZones.Domain;
+    using CustomZones.Integration;
     using CustomZones.Utilities;
 
     /// <summary>
@@ -41,16 +42,10 @@ namespace CustomZones.Systems
         private EntityQuery m_ZoneQuery;
         private int m_LastIndexedCount = -1;
 
-        // Late icon providers (AssetIconLibrary) rewrite building m_Icon during
-        // /after load, possibly AFTER our first index. Re-index a few times on a
-        // spread-out schedule so those icons get picked up. Frames @60fps.
-        // Extended well past the original 30 s: AssetIconLibrary rewrites the
-        // prefab icons at an unpredictable point during/after load, and losing
-        // that race means we show our own generated icon for a building AIL
-        // actually covers (it has ~7992 of them). Probing AIL's URLs directly
-        // instead was worse — it flooded the game log with 404s for everything
-        // AIL lacks. Frames @60fps: 2 s, 6 s, 12 s, 30 s, 60 s, 2 min, 4 min.
-        private static readonly int[] RefreshFrames = { 120, 360, 720, 1800, 3600, 7200, 14400 };
+        // Asset Icon Library rewrites building icons some time after load: one late
+        // re-index (~1 min @60fps) picks those up. Building Icon Generator pictures
+        // are resolved live by the editor, so they need no re-index.
+        private static readonly int[] RefreshFrames = { 3600 };
         private int m_FramesSinceIndex;
         private int m_RefreshesDone;
 
@@ -62,6 +57,15 @@ namespace CustomZones.Systems
 
         /// <summary>Fast lookup: prefab name -> entry.</summary>
         public Dictionary<string, BuildingEntry> ByName { get; } = new();
+
+        /// <summary>Buildings grouped by family (every level and lot size of one style).</summary>
+        public List<BuildingFamily> Families { get; private set; } = new();
+
+        /// <summary>Fast lookup: family key -> family.</summary>
+        public Dictionary<string, BuildingFamily> FamiliesByKey { get; } = new();
+
+        /// <summary>Style -> its families (one per lot size). Used to upgrade old style-only keys.</summary>
+        public Dictionary<string, List<string>> FamilyKeysByStyle { get; } = new();
 
         /// <summary>Distinct asset-pack names found, for the "Pack" filter.</summary>
         public List<string> Packs { get; } = new();
@@ -188,8 +192,8 @@ namespace CustomZones.Systems
                 CategoryIcons.Add(string.Empty);
             }
 
-            // "Any" filter icon (UIL star, declared dependency).
-            CategoryIcons[0] = "coui://uil/Standard/StarAll.svg";
+            // "Any" filter icon (a game glyph).
+            CategoryIcons[0] = "Media/Glyphs/StarFilled.svg";
 
             BuildZoneDensityCache();
 
@@ -218,6 +222,23 @@ namespace CustomZones.Systems
                 return string.Compare(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase);
             });
 
+            Families = BuildingFamilies.Build(Buildings);
+            FamiliesByKey.Clear();
+            FamilyKeysByStyle.Clear();
+            foreach (var family in Families)
+            {
+                FamiliesByKey[family.Key] = family;
+
+                var style = BuildingFamilies.StyleOfKey(family.Key);
+                if (!FamilyKeysByStyle.TryGetValue(style, out var keys))
+                {
+                    keys = new List<string>();
+                    FamilyKeysByStyle[style] = keys;
+                }
+
+                keys.Add(family.Key);
+            }
+
             // Pack list (name + icon), sorted, for the "Pack" filter row.
             foreach (var kv in m_PackIconByName.OrderBy(k => k.Key, StringComparer.OrdinalIgnoreCase))
             {
@@ -233,7 +254,7 @@ namespace CustomZones.Systems
                 .GroupBy(b => $"{b.Category}/{b.Density}")
                 .OrderBy(g => g.Key)
                 .Select(g => $"{g.Key}={g.Count()}"));
-            Mod.Log.Info($"Indexed {Buildings.Count} spawnable buildings ({Packs.Count} packs). Breakdown: {byCat}");
+            Mod.Log.Info($"Indexed {Buildings.Count} spawnable buildings in {Families.Count} families ({Packs.Count} packs). Breakdown: {byCat}");
         }
 
         /// <summary>
@@ -355,6 +376,7 @@ namespace CustomZones.Systems
             entry = new BuildingEntry
             {
                 PrefabName = buildingPrefab.name,
+                FamilyKey = BuildingFamilies.KeyOf(buildingPrefab.name, buildingData.m_LotSize.x, buildingData.m_LotSize.y),
                 DisplayName = LocaleHelper.GetAssetName(buildingPrefab),
                 PrefabEntity = entity,
                 Category = category,
@@ -441,6 +463,19 @@ namespace CustomZones.Systems
                 !thumbnail.StartsWith("thumbnail://", StringComparison.OrdinalIgnoreCase))
             {
                 return thumbnail;
+            }
+
+            // Building Icon Generator, when installed, provides real pictures of every
+            // building: use its 128 px thumbnail. (Missing ones are requested by the
+            // editor for the cards actually on screen.)
+            if (BigIcons.IsInstalled)
+            {
+                if (BigIcons.TryGetThumbnailUri(buildingPrefab.name, out var bigThumbnail))
+                {
+                    return bigThumbnail;
+                }
+
+                return string.Empty;
             }
 
             var generated = m_IconGenerator.GetGeneratedIcon(buildingPrefab.name);

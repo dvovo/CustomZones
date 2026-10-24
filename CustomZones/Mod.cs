@@ -35,6 +35,9 @@ namespace CustomZones
             // Locales
             LocaleHelper.LoadEmbeddedLocales();
 
+            // coui://customzones/ host for the generated zone icons.
+            ZoneIcons.RegisterHost();
+
             // --- Systems registration ---
 
             // Indexes every spawnable (growable) building prefab with its
@@ -46,10 +49,6 @@ namespace CustomZones
             // couple of renders per frame, and caches the PNGs on disk so this
             // only ever happens once per building.
             updateSystem.UpdateAt<IconGeneratorSystem>(SystemUpdatePhase.UIUpdate);
-
-            // Measurement spike for the "photograph the real game" pipeline.
-            // Idle until the UI asks for a measurement.
-            updateSystem.UpdateAt<CaptureProbeSystem>(SystemUpdatePhase.UIUpdate);
 
             // Turns every palette into a real paintable zone. Zone creation for
             // pre-existing palettes happens in InstallAtLoad() BELOW (ByLaw
@@ -72,14 +71,23 @@ namespace CustomZones
             // SpawnBuildingJob. Runs just BEFORE the vanilla ZoneSpawnSystem.
             updateSystem.UpdateBefore<PaletteZoneSpawnSystem, ZoneSpawnSystem>(SystemUpdatePhase.GameSimulation);
 
+            // Level-up rules of each custom zone (blocked / keep design / within the zone),
+            // applied to the game's level-up just before BuildingConstructionSystem swaps the prefab.
+            updateSystem.UpdateBefore<LevelUpControlSystem, BuildingConstructionSystem>(SystemUpdatePhase.GameSimulation);
+
             // UI bindings (panel, palettes submenu, filters, virtual scroll).
             updateSystem.UpdateAt<PaletteUISystem>(SystemUpdatePhase.UIUpdate);
 
-            // CRITICAL (ByLaw): disable the vanilla ZoneCheckSystem. A whitelisted
-            // building keeps its ORIGINAL zone type (we never clone/re-zone it),
-            // so on a palette cell the cell's zone type != the building's zone
-            // type — ZoneCheckSystem would flag that mismatch and condemn the
-            // building instantly. ByLaw disables it globally for the same reason.
+            // The vanilla ZoneCheckSystem is replaced by CustomZoneCheckSystem. A
+            // building grown on a custom zone keeps its ORIGINAL zone type, so the
+            // vanilla check would see the cell's zone type != the building's and
+            // condemn it at once. The replacement is the same check that also
+            // accepts a custom zone as the zones it behaves like.
+            updateSystem.UpdateAt<CustomZoneCheckSystem>(SystemUpdatePhase.ModificationEnd);
+
+            // Removes an obsolete table from cities saved with a test build (zones are kept across
+            // save / load by saving the zone prefabs: see PaletteZoneInitSystem).
+            updateSystem.UpdateBefore<CustomZoneSaveSystem, CustomZoneCheckSystem>(SystemUpdatePhase.ModificationEnd);
             updateSystem.World
                 .GetOrCreateSystemManaged<global::Game.Buildings.ZoneCheckSystem>()
                 .Enabled = false;
@@ -98,6 +106,8 @@ namespace CustomZones
         public void OnDispose()
         {
             Log.Info(nameof(OnDispose));
+
+            ZoneIcons.UnregisterHost();
 
             if (Settings != null)
             {

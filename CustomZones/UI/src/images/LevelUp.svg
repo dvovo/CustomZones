@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="-12 -2 74 70">
+  <defs>
+    <linearGradient id="levelUpFill" x1="0.5" x2="0.5" y2="1" gradientUnits="objectBoundingBox">
+      <stop offset="0" stop-color="#80cc1d"/>
+      <stop offset="1" stop-color="#68ab13"/>
+    </linearGradient>
+  </defs>
+  <path d="M12.848,32v28.58a2.623,2.623,0,0,0,2.581,2.663H34.4a2.623,2.623,0,0,0,2.581-2.663V32h6.468c4.6,0,6.9-5.737,3.65-9.093L28.588,3.81a5.049,5.049,0,0,0-7.3,0L2.78,22.909C-.471,26.264,1.832,32,6.43,32Z" stroke="#b5ed22" stroke-width="3" fill="url(#levelUpFill)"/>
+</svg>
