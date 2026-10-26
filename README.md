@@ -11,7 +11,7 @@ A Cities: Skylines II code mod. It lets players create their own zone types and 
 - **Bugs and ideas:** open an issue with the templates of this repository (please attach `CustomZones.log`), or post in the discussion of the mod's Paradox Mods page.
 - **Images:** the mod icon, thumbnail, banner and social image are in `Branding/`; the gallery is in `CustomZones/Properties/Screenshots/`.
 
-Author: **dvovo** — [Paradox Mods](https://mods.paradoxplaza.com/authors/dvovo) · [Source](https://github.com/dvovo/CustomZones) · Developed with the help of AI · License: [MIT](LICENSE)
+Author: **dvovo** — [Paradox Mods](https://mods.paradoxplaza.com/authors/dvovo) · [Mod page](https://mods.paradoxplaza.com/mods/165018/Windows) · [Source](https://github.com/dvovo/CustomZones) · Developed with the help of AI · License: [MIT](LICENSE)
 
 ## At a glance
 

@@ -1,6 +1,6 @@
 <Publish>
 	<!--Id must be set to a value for an update of an existing mod. 0 means a new mod.-->
-	<ModId Value="0" />
+	<ModId Value="165018" />
 	<DisplayName Value="Custom Zones" />
 	<ShortDescription Value="Make your own zones and choose exactly which buildings grow in them. Uses the game's normal demand." />
 	<LongDescription>
