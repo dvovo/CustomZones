@@ -144,6 +144,6 @@ Made by dvovo (https://mods.paradoxplaza.com/authors/dvovo) with the help of AI.
 - Updated gallery pictures.</ChangeLog>
 	<!--GitHub button of the page-->
 	<ExternalLink Type="github" Url="https://github.com/dvovo/CustomZones" />
-	<!--Private while testing; set to Public for the public release-->
-	<AccessLevel Value="Private" />
+	<!--Public, Private or Unlisted. Applied by every publish profile.-->
+	<AccessLevel Value="Public" />
 </Publish>
