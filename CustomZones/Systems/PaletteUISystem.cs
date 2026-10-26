@@ -638,11 +638,52 @@ namespace CustomZones.Systems
             }
 
             m_PaintPaletteId = string.Empty;
-            if (m_ToolSystem.ActivatePrefabTool(zone))
+            if (SelectInToolbar(zoneEntity) || m_ToolSystem.ActivatePrefabTool(zone))
             {
                 // Already selected in the panel: HandleToolSelection must not select it again.
                 m_ActiveZonePalette.Value = paletteId;
                 m_ZoneToolWasActive = true;
+            }
+        }
+
+        private static readonly System.Reflection.MethodInfo s_ToolbarSelectAsset =
+            typeof(Game.UI.InGame.ToolbarUISystem).GetMethod(
+                "SelectAsset",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance,
+                null,
+                new[] { typeof(Entity), typeof(bool) },
+                null);
+
+        /// <summary>
+        /// Picks a zone the way a click in the zoning toolbar does (ToolbarUISystem's
+        /// private SelectAsset with updateTool): the tool paints with it and the
+        /// toolbar highlights it. When the tool is changed directly, the game updates
+        /// the tool but keeps the old zone highlighted. False when that method
+        /// cannot be called (the caller then activates the tool itself).
+        /// </summary>
+        private bool SelectInToolbar(Entity zoneEntity)
+        {
+            if (s_ToolbarSelectAsset == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                var toolbar = World.GetExistingSystemManaged<Game.UI.InGame.ToolbarUISystem>();
+                if (toolbar == null)
+                {
+                    return false;
+                }
+
+                s_ToolbarSelectAsset.Invoke(toolbar, new object[] { zoneEntity, true });
+                return m_ToolSystem.activeTool is ZoneToolSystem && m_ToolSystem.activePrefab != null &&
+                       World.GetOrCreateSystemManaged<PrefabSystem>().GetEntity(m_ToolSystem.activePrefab) == zoneEntity;
+            }
+            catch (Exception ex)
+            {
+                Mod.Log.Warn($"Could not pick the zone in the toolbar ({ex.Message}).");
+                return false;
             }
         }
 

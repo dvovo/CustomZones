@@ -153,7 +153,7 @@ Side effects are kept consistent with the game:
 - React / TypeScript under `CustomZones/UI/src`, bound with `cs2/api` (`bindValue` / `trigger`).
 - **Panel:** zone list, import / export, building browser with filters and search. The browser is virtualised: C# sends only the visible rows (`Families`, plus `FamilyCount`, `ScrollIndex`), and the large preview gets its own `PreviewFamily` binding so it stays current when its card is off screen.
 - **Zone window:** name, colour, icon chooser and designer, base zone, growth mode, level-up options, coverage warnings (`Coverage`: lot widths with no building, `NoBirth`, `Stops`), statistics (`ZoneStats`, refreshed every 5 s while open).
-- **Panel and zoning toolbar stay in step:** a custom zone picked in the zoning toolbar is selected in the panel (`HandleToolSelection`), and a zone clicked in the panel, created or imported is picked in the toolbar (`PickZone` trigger, `PickPaintZone`: `ToolSystem.ActivatePrefabTool`, once the new zone has its zone type index).
+- **Panel and zoning toolbar stay in step:** a custom zone picked in the zoning toolbar is selected in the panel (`HandleToolSelection`), and a zone clicked in the panel, created or imported is picked in the toolbar (`PickZone` trigger, `PickPaintZone`, once the new zone has its zone type index). It goes through `ToolbarUISystem.SelectAsset(entity, updateTool: true)` (private, by reflection), as a click in the toolbar does: activating the tool directly would paint with the zone but leave the old one highlighted. `ToolSystem.ActivatePrefabTool` is the fallback..
 - Vanilla components (checkbox, dropdown, colour field) are imported through the game's module registry (`vanilla.ts`).
 
 ## Data files
