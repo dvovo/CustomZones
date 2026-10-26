@@ -111,7 +111,7 @@ Custom Zones works on its own, but **Building Icon Generator** (by the same auth
 	</LongDescription>
 	<!--Thumbnail-->
 	<Thumbnail Value="Properties/Thumbnail.png" />
-	<!--Screenshot, can be set multiple times-->
+	<!--Screenshot, can be set multiple times (Paradox Mods accepts 10 at most)-->
 	<Screenshot Value="Properties/Screenshots/1.png" />
 	<Screenshot Value="Properties/Screenshots/2.png" />
 	<Screenshot Value="Properties/Screenshots/11.png" />
@@ -119,10 +119,8 @@ Custom Zones works on its own, but **Building Icon Generator** (by the same auth
 	<Screenshot Value="Properties/Screenshots/9.png" />
 	<Screenshot Value="Properties/Screenshots/10.png" />
 	<Screenshot Value="Properties/Screenshots/3.png" />
-	<Screenshot Value="Properties/Screenshots/4.png" />
 	<Screenshot Value="Properties/Screenshots/5.png" />
 	<Screenshot Value="Properties/Screenshots/6.png" />
-	<Screenshot Value="Properties/Screenshots/7.png" />
 	<!--Tag, can be set multiple times-->
 	<Tag Value="Code Mod" />
 	<!--Link to the forum thread of the mod's discussion. After turning the discussion on in the
