@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Mods by dvovo on Paradox Mods
+    url: https://mods.paradoxplaza.com/authors/dvovo
+    about: Download Custom Zones, read how to use it, and join the discussion on its page.
+  - name: Documentation
+    url: https://github.com/dvovo/CustomZones#readme
+    about: Technical documentation of the mod.

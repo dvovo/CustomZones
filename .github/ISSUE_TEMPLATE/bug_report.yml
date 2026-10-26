@@ -1,0 +1,103 @@
+name: Bug report
+description: Something in Custom Zones does not work as expected.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem. The log file is the most useful part of a report: please attach it.
+        Custom Zones changes how zones grow, so details about your zone and your city help a lot.
+
+  - type: input
+    id: game-version
+    attributes:
+      label: Game version
+      description: Shown at the bottom right of the launcher and of the main menu.
+      placeholder: "1.6.2f1"
+    validations:
+      required: true
+
+  - type: input
+    id: mod-version
+    attributes:
+      label: Custom Zones version
+      description: Shown on the mod's Paradox Mods page and in the game's mod list.
+      placeholder: "1.0.0-beta.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: What is it about?
+      options:
+        - Buildings do not grow, or the wrong ones grow
+        - Levelling up or the level buttons
+        - Buildings condemned or not condemned
+        - City economy, households, jobs or demand
+        - The panel, the building list or the large preview
+        - The icon designer
+        - Exporting or importing zones
+        - Crash, freeze or performance
+        - Something else
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the problem and the steps that lead to it.
+      placeholder: |
+        1. Created a zone that behaves like ...
+        2. Ticked ... and painted it along ...
+        3. Then ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: false
+
+  - type: textarea
+    id: zone
+    attributes:
+      label: Zone settings
+      description: |
+        Which zone it behaves like, its Growth option (Like the game or Skip levels), Level up and Prefer same design.
+        Even better: export the zone from its window and attach the file (it is in the Exports folder, the options have a button to open it).
+    validations:
+      required: false
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log files
+      description: |
+        Drag the files here. They are in the game's user-data folder:
+        %USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\Logs\CustomZones.log
+        For a problem with the panel, add UI.log from the same folder. For a crash, add Player.log from the folder above Logs.
+      placeholder: Drop CustomZones.log here.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: big
+    attributes:
+      label: Building Icon Generator
+      options:
+        - Installed
+        - Not installed
+    validations:
+      required: true
+
+  - type: textarea
+    id: other-mods
+    attributes:
+      label: Other mods
+      description: The other code mods you use, above all any that change zoning, growth, levelling up or the economy.
+    validations:
+      required: false

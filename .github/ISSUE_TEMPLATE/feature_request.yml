@@ -1,0 +1,19 @@
+name: Feature request
+description: An idea to improve Custom Zones.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: Describe the feature and what it would let you do.
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Why is it useful?
+      description: How you would use it in your city, for example the kind of district or street you want to build.
+    validations:
+      required: false
