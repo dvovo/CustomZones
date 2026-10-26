@@ -1,10 +1,10 @@
 # Custom Zones
 
+**BETA: this mod is still under development.** It works, but it is a test version: some things may not work as expected yet, and settings or behaviour may change between versions. Because it changes how your city grows, **save a copy of your city before you try it**, and please report anything strange (see **Support** at the end of this page). Thank you for helping to test it!
+
 **Make your own zones and choose exactly which buildings grow in them.**
 
 A custom zone is painted like any other zone and grows with the city's normal demand, but only the buildings you picked can appear in it. Want a street of red-brick row houses only, a farm belt without factories, or a downtown of glass towers? Make a zone for it.
-
-**Beta:** this is a test version, and it touches how your city grows, so your feedback matters. If something looks wrong, please post in the **discussion** of this page (also reachable from the game's mod menu) with what you did and your log file: Cities Skylines II, Logs, CustomZones.log. Ideas are welcome there too.
 
 ## Quick start
 1. Open the **zoning tool**. In the tool options, next to **Custom Zones**, click the button to open the panel.
@@ -103,4 +103,10 @@ Custom Zones works on its own, but **Building Icon Generator** (by the same auth
 
 12 languages: English, Spanish, German, French, Italian, Brazilian Portuguese, Polish, Russian, Japanese, Korean, Simplified and Traditional Chinese.
 
-Source code and bug reports: use the GitHub button on this page.
+## Support
+
+Bug reports and ideas are welcome in the Issues section of the GitHub repository (GitHub button on this page). The bug report form asks for what is needed. Please always include:
+- the log file **Logs\CustomZones.log** from the game's user-data folder (and **Logs\UI.log** for a problem with the panel);
+- what you did, and the settings of your zone. Even better: export the zone from its window and attach the file.
+
+Made by dvovo (https://mods.paradoxplaza.com/authors/dvovo) with the help of AI. Open source under the MIT License.
