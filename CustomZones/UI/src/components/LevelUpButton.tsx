@@ -1,3 +1,7 @@
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
 // Level controls in the selected building's info panel, for zoned buildings,
 // next to the panel's own action buttons (focus / relocate / delete):
 //   - "level up": the next level now, with the green arrow of the game's own

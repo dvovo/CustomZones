@@ -1,7 +1,8 @@
-// <copyright file="UIEntries.cs">
-// Custom Zones - Licensed under the MIT license.
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
 // IJsonWritable binding DTO pattern follows FindIt's Domain/UIBinding classes.
-// </copyright>
 
 namespace CustomZones.Domain.UIBinding
 {
@@ -170,7 +171,7 @@ namespace CustomZones.Domain.UIBinding
         public bool LevelUp;
         public bool KeepDesign;
 
-        /// <summary>0 = born at level 1 like the game, 1 = born at any ticked level.</summary>
+        /// <summary>Growth mode: 0 = like the game, 1 = skip levels (<see cref="CustomZones.Domain.GrowthMode"/>).</summary>
         public int Growth;
 
         public void Write(IJsonWriter writer)

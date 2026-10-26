@@ -8,7 +8,7 @@ A Cities: Skylines II code mod. It lets players create their own zone types and 
 
 - **Status:** beta (`1.0.0-beta.1`), built against game version 1.6.2f1.
 - **Player guide:** [DESCRIPTION.md](DESCRIPTION.md) is the text of the Paradox Mods page and explains every option from the player's side. This README covers how the mod works.
-- **Bugs and ideas:** open an issue with the templates of this repository (please attach `CustomZones.log`), or post in the discussion of the mod's Paradox Mods page.
+- **Bugs and ideas:** open an issue with the templates of this repository (please attach `CustomZones.log`), or post in the [forum thread](https://forum.paradoxplaza.com/forum/threads/mod-beta-custom-zones-discussion-feedback.1947164/), which is also the discussion of the mod's Paradox Mods page.
 - **Images:** the mod icon, thumbnail, banner and social image are in `Branding/`; the gallery is in `CustomZones/Properties/Screenshots/`.
 
 Author: **dvovo** — [Paradox Mods](https://mods.paradoxplaza.com/authors/dvovo) · [Mod page](https://mods.paradoxplaza.com/mods/165018/Windows) · [Source](https://github.com/dvovo/CustomZones) · Developed with the help of AI · License: [MIT](LICENSE)
@@ -35,6 +35,7 @@ Author: **dvovo** — [Paradox Mods](https://mods.paradoxplaza.com/authors/dvovo
 - [Compatibility notes](#compatibility-notes)
 - [Building from source](#building-from-source)
 - [Logs and bug reports](#logs-and-bug-reports)
+- [Credits and license](#credits-and-license)
 
 ## Design rules
 
@@ -190,10 +191,23 @@ The zone cells themselves are ordinary game zone cells pointing at the custom zo
 
 - **Requirements:** Visual Studio 2022, the Cities: Skylines II modding toolchain (installed from the game's options, sets `CSII_TOOLPATH`) and Node.js.
 - **Build:** open `CustomZones.sln` and build the `CustomZones` project. The toolchain copies the mod to the local Mods folder. The UI is built by the project; for UI-only work run `npm install` and `npm run build` in `CustomZones/UI`.
-- **Publish:** Visual Studio, Publish, with the toolchain's profiles (`PublishNewMod` once, then `PublishNewVersion`). The page text comes from `Properties/PublishConfiguration.xml`, which holds a copy of `DESCRIPTION.md`.
+- **Publish:** Visual Studio, Publish, with the profiles in `Properties/PublishProfiles`: `PublishNewMod` once, `PublishNewVersion` for each new version (raise `ModVersion` and write the `ChangeLog` first) and `UpdatePublishedConfiguration` to update only the page (text, images, links). The page text comes from `Properties/PublishConfiguration.xml`, which holds a copy of `DESCRIPTION.md`.
 
 ## Logs and bug reports
 
 - The mod logs to `Logs/CustomZones.log` next to the game's other logs: zone creation, building wiring (`PopulateAllowedBuffers`), every level-up decision, cancelled material requests, skip rounds and spawn timing.
 - UI errors appear in `Logs/UI.log`.
 - Please attach `CustomZones.log` to bug reports, with the steps that led to the problem.
+
+## Credits and license
+
+Custom Zones is made by **dvovo** ([Paradox Mods](https://mods.paradoxplaza.com/authors/dvovo)), developed with the help of AI, and released under the [MIT License](LICENSE).
+
+It builds on ideas and code shared by other Cities: Skylines II mods:
+
+- **FindIt-CSII** (T. D. W., yenyang; MIT License): building classification, browser filters, UI build setup (`webpack.config.js`, `tools/css-presence.js`) and the UI binding helpers.
+- **CS2-Platter** (Luca Rager; MIT License): `GenericUIReader`, `GenericUIWriter` and the binding helpers in `ExtendedUISystemBase.cs`, adapted. Their files keep the original author's notice.
+- **ZoningByLaw** (FutureProg): the idea of custom zones as zone prefabs and of spawning from a list of allowed buildings, reimplemented.
+- **Asset Icon Library**: the `coui://` host and file naming convention followed by the fallback building pictures.
+
+Cities: Skylines II is a trademark of Paradox Interactive. This mod is not affiliated with or endorsed by Paradox Interactive or Colossal Order.

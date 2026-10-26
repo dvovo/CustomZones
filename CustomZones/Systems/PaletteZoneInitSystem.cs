@@ -1,10 +1,9 @@
-// <copyright file="PaletteZoneInitSystem.cs">
-// CustomZones - Licensed under the MIT license.
-// Finalizes a palette zone entity once it is created, mirroring ZoningByLaw's
-// ByLawZonePrefabInitSystem: it flags the zone as supporting every lot
-// corner/narrow variant. Its OnUpdate firing also PROVES our zone entities
-// receive the Created tag and go through init.
-// </copyright>
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
+// Finishes the zone entity of each custom zone when it is created. The approach
+// follows ZoningByLaw's zone init system (reimplemented, not copied).
 
 namespace CustomZones.Systems
 {
@@ -16,6 +15,11 @@ namespace CustomZones.Systems
     using Unity.Entities;
     using CustomZones.Components;
 
+    /// <summary>
+    /// Finishes each new custom zone entity: it supports every lot corner and
+    /// narrow lot variant, and carries a disabled Locked component so the city
+    /// saves it (see below).
+    /// </summary>
     public partial class PaletteZoneInitSystem : GameSystemBase
     {
         private EntityQuery m_CreatedQuery;
@@ -41,19 +45,19 @@ namespace CustomZones.Systems
                 {
                     Mod.Log.Info($"PaletteZoneInit entity={entity.Index}: areaType={zoneData.m_AreaType}, zoneTypeIndex={zoneData.m_ZoneType.m_Index}.");
 
-                    // Support all lot corner/narrow variants, like ByLaw's init.
+                    // Every lot corner and narrow lot variant.
                     zoneData.m_ZoneFlags |= ZoneFlags.SupportLeftCorner | ZoneFlags.SupportNarrow | ZoneFlags.SupportRightCorner;
                     EntityManager.SetComponentData(entity, zoneData);
                 }
 
-                // CRITICAL for saves: the game only writes into a save the prefabs
+                // Needed for saves: the game only writes into a save the prefabs
                 // that carry a Locked component (enabled or not) or are referenced
                 // by saved entities. Zone cells store a zone number, and on load the
                 // game maps the saved numbers to the current ones through those saved
                 // zone prefabs; a zone prefab missing from the save maps to "no zone"
-                // and its painted cells are wiped. Our zones have no milestone
-                // unlock, so give them the component, disabled (= unlocked), like
-                // every vanilla zone has.
+                // and its painted cells are lost. Custom zones have no milestone, so
+                // they get the component disabled (unlocked), as the game's zones
+                // have it once unlocked.
                 if (!EntityManager.HasComponent<Locked>(entity))
                 {
                     EntityManager.AddComponent<Locked>(entity);

@@ -105,7 +105,7 @@ Custom Zones works on its own, but **Building Icon Generator** (by the same auth
 
 ## Support
 
-Bug reports and ideas are welcome in the Issues section of the GitHub repository (GitHub button on this page). The bug report form asks for what is needed. Please always include:
+Questions, ideas and comments are welcome in the **Discussion** below. For bug reports, the best place is the Issues section of the GitHub repository (GitHub button on this page): its bug report form asks for what is needed. Please always include:
 - the log file **Logs\CustomZones.log** from the game's user-data folder (and **Logs\UI.log** for a problem with the panel);
 - what you did, and the settings of your zone. Even better: export the zone from its window and attach the file.
 

@@ -1,6 +1,9 @@
-// From FindIt-CSII (MIT). Injects a `hasCSS` export into the emitted module
-// so the game's UI mod loader knows it must also load the .css file.
-// Without this the stylesheet is emitted but NEVER loaded -> unstyled UI.
+// Adapted from FindIt-CSII (MIT License).
+// Changes: Copyright (c) 2026 dvovo. https://mods.paradoxplaza.com/authors/dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+//
+// Adds a `hasCSS` export to the emitted module, so the game's UI mod loader
+// also loads the .css file (otherwise the stylesheet is emitted but not loaded).
 const { RawSource } = require("webpack").sources;
 
 exports.CSSPresencePlugin = class CSSPresencePlugin {

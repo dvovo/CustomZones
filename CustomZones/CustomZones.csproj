@@ -9,7 +9,12 @@
 		<FileVersion>$(Version)</FileVersion>
 		<AssemblyVersion>$(Version)</AssemblyVersion>
 		<Product>Custom Zones</Product>
-		<Description>Create your own zone types: paint them like any zone and only the buildings you picked will grow, by demand.</Description>
+		<Description>Make your own zones and choose exactly which buildings grow in them. Uses the game's normal demand.</Description>
+		<Authors>dvovo</Authors>
+		<Copyright>Copyright (c) 2026 dvovo</Copyright>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://mods.paradoxplaza.com/authors/dvovo</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/dvovo/CustomZones</RepositoryUrl>
 
 		<!-- Folder where Game.dll is located. Only set if the game is NOT in the default location. -->
 		<CustomManagedPath></CustomManagedPath>

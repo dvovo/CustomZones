@@ -1,8 +1,9 @@
-// <copyright file="PaletteStorage.cs">
-// Custom Zones - Licensed under the MIT license.
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
 // Storage location pattern follows FindIt's custom data folder usage
 // (Colossal.PSI.Environment.EnvPath.kUserDataPath + /ModsData/).
-// </copyright>
 
 namespace CustomZones.Storage
 {
@@ -460,7 +461,7 @@ namespace CustomZones.Storage
                     palette.AllowedBuildings ??= new HashSet<string>();
                     palette.Icon ??= string.Empty;
 
-                    // v0.1 stored individual prefabs: keep their families instead.
+                    // The old format stored individual prefabs: keep their families instead.
                     if (palette.AllowedBuildings.Count > 0)
                     {
                         foreach (var prefabName in palette.AllowedBuildings)

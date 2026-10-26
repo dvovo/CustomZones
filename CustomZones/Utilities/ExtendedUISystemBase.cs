@@ -1,9 +1,7 @@
-// <copyright file="ExtendedUISystemBase.cs">
-// CustomZones - Licensed under the MIT license.
-// Minimal adaptation of the ExtendedUISystemBase / ValueBindingHelper
-// utilities shared by FindIt-CSII and CS2-Platter (both MIT licensed,
-// originally by T. D. W. / yenyang / Luca Rager).
-// </copyright>
+// Adapted from the ExtendedUISystemBase / ValueBindingHelper utilities shared by
+// FindIt-CSII and CS2-Platter (MIT License; T. D. W., yenyang, Luca Rager).
+// Changes: Copyright (c) 2026 dvovo. https://mods.paradoxplaza.com/authors/dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
 
 namespace CustomZones.Utilities
 {
@@ -11,6 +9,10 @@ namespace CustomZones.Utilities
     using Game.UI;
     using System;
 
+    /// <summary>
+    /// UI system base with helpers that create value bindings and triggers for
+    /// any type (read and written through GenericUIReader / GenericUIWriter).
+    /// </summary>
     public abstract partial class ExtendedUISystemBase : UISystemBase
     {
         public ValueBindingHelper<T> CreateBinding<T>(string key, T initialValue)
@@ -68,6 +70,9 @@ namespace CustomZones.Utilities
         }
     }
 
+    /// <summary>
+    /// A value binding with an optional callback for values set from the UI.
+    /// </summary>
     public class ValueBindingHelper<T>
     {
         private readonly Action<T> _updateCallBack;

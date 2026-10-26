@@ -1,4 +1,6 @@
-// Mirrors FindIt-CSII's UI build setup (MIT).
+// UI build, adapted from FindIt-CSII's build setup (MIT License).
+// Changes: Copyright (c) 2026 dvovo. https://mods.paradoxplaza.com/authors/dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
 const path = require("path");
 const MOD = require("./mod.json");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");

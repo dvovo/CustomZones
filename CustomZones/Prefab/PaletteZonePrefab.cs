@@ -1,8 +1,9 @@
-// <copyright file="PaletteZonePrefab.cs">
-// CustomZones - Licensed under the MIT license.
-// A ZonePrefab subclass carrying the palette marker components, mirroring
-// ZoningByLaw's ByLawZonePrefab (technique reimplemented, not copied).
-// </copyright>
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
+// The zone prefab of a custom zone. The approach follows ZoningByLaw's zone
+// prefab (reimplemented, not copied).
 
 namespace CustomZones.Prefab
 {
@@ -12,9 +13,10 @@ namespace CustomZones.Prefab
     using CustomZones.Components;
 
     /// <summary>
-    /// A real ZonePrefab that also declares the palette marker + allowed-
-    /// building buffer in its archetype. Created via ScriptableObject.
-    /// CreateInstance (never Clone) so it goes through full prefab init.
+    /// A ZonePrefab whose entity also carries <see cref="PaletteZoneMarker"/> and
+    /// the <see cref="PaletteAllowedBuilding"/> buffer. Created with
+    /// ScriptableObject.CreateInstance (not cloned), so it goes through the
+    /// game's full prefab initialisation.
     /// </summary>
     public class PaletteZonePrefab : ZonePrefab
     {

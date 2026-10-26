@@ -1,8 +1,13 @@
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
 // Building browser of the zone editor. One card per building (one style at one
 // lot size); its levels L1-L5 are a strip under the picture: hover a level to
-// see it, click the card to add the design with all its levels, click a level to add or remove just that one. The magnifier opens a
-// large preview where every level can be looked at and placed in the city. Virtual scrolling:
-// C# only sends the rows on screen; this component measures how many fit.
+// see it, click the card to add the design with all its levels, click a level
+// to add or remove just that one. The magnifier opens a large preview where
+// every level can be looked at and placed in the city. Virtual scrolling: C#
+// only sends the rows on screen; this component measures how many fit.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useValue } from "cs2/api";
 import { useLocalization } from "cs2/l10n";
@@ -803,7 +808,7 @@ export const FamilyPreview = () => {
   useEffect(() => () => setPreviewed(null), []);
 
   // Keys: Escape closes, left / right step through the list, 1-5 show a level,
-  // Space lets the level shown grow in the zone (or not).
+  // Space lets the level shown grow in the zone (or not), A does it for all levels.
   useEffect(() => {
     if (!family) return;
     const onKey = (e: KeyboardEvent) => {

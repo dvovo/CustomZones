@@ -1,45 +1,26 @@
-// <copyright file="PaletteZoneSystem.cs">
-// CustomZones - Licensed under the MIT license.
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
 //
-// THE core of the mod (v3 architecture, faithful to ZoningByLaw).
+// Custom zones as real zone prefabs. Every custom zone ("palette" in the code)
+// becomes a paintable zone with its own ZoneType index, under a "Custom Zones"
+// tab of the zoning toolbar. The way the zones are created follows ZoningByLaw
+// (reimplemented, not copied).
 //
-// Every palette becomes a REAL paintable zone in the game's zoning toolbar,
-// under a new "Palettes" category tab. The vanilla ZoneSpawnSystem only
-// grows building prefabs whose zone matches the cell's zone type, so once a
-// palette zone has its own ZoneType index only that palette's buildings can
-// grow there.
+// How the game indexes zones: ZoneSystem.InitializeZonePrefabs gives a ZoneType
+// index to every new (Created) zone entity whose managed prefab has an area
+// type. PrefabSystem.AddPrefab creates that entity at once, with Created, and
+// PrefabSystem drives the PrefabUpdate phase in which ZoneSystem runs, so a zone
+// is indexed by the first ZoneSystem pass after it is added.
 //
-// KEY INSIGHT (from decompiling ZoneSystem + PrefabSystem, 2026-07-31):
-//   ZoneSystem.InitializeZonePrefabs assigns a ZoneType index to any entity
-//   with ZoneData + PrefabData + Created whose MANAGED prefab has
-//   m_AreaType != None. PrefabSystem.AddPrefab creates that entity
-//   synchronously (with Created) and PrefabSystem.OnUpdate itself drives the
-//   PrefabUpdate phase where ZoneSystem runs. So the zone gets indexed on the
-//   first ZoneSystem pass that sees it Created.
-//
-//   ZoningByLaw creates its zones in Mod.OnLoad — inside the initial prefab
-//   window of the persistent world, where that first pass runs over fresh
-//   Created prefabs and the index then persists forever. Creating them later
-//   (OnGamePreload / mid-game as the old code did) missed that clean window
-//   and the zone stayed area=None, index=0 forever.
-//
-//   Bonus: creating in OnLoad lets the vanilla UIObject.LateInitialize wire
-//   the category/zone into the toolbar automatically (as ByLaw and Platter
-//   rely on), which removes all the manual WireToolbar / unlock-event /
-//   deserialize-repair machinery the old code needed.
-//
-// This file therefore:
-//   - InstallAtLoad(): called from Mod.OnLoad, creates the category, the
-//     one visible toolbar zone per existing palette (ByLaw recipe:
-//     ScriptableObject.CreateInstance + copied base-zone components + explicit
-//     m_AreaType + stripped ThemeObject/Unlockable + fresh UIObject).
-//   - OnUpdate(): mid-game palette add/remove (ByLaw CreateNewByLaw style) and
-//     the (Phase 1) per-building clone creation once a zone is indexed.
-//
-// PHASE 2 (planned) replaces the building clones with a ByLaw-style
-// PaletteZoneSpawnSystem that filters ALL buildings by the palette whitelist
-// at spawn time and disables the vanilla ZoneCheckSystem.
-// </copyright>
+// This system:
+//   - InstallAtLoad: called from Mod.OnLoad. Creates the toolbar tab and one
+//     zone per existing custom zone, before the first ZoneSystem pass, so the
+//     game also wires them into the toolbar (UIObject.LateInitialize).
+//   - OnUpdate: creates the zones added during a game, takes deleted ones out of
+//     the toolbar, keeps each zone's list of buildings that may be born
+//     (PaletteAllowedBuilding) up to date for PaletteZoneSpawnSystem, and
+//     repaints zones whose colour or icon changed.
 
 namespace CustomZones.Systems
 {
@@ -56,6 +37,9 @@ namespace CustomZones.Systems
     using CustomZones.Domain;
     using CustomZones.Storage;
 
+    /// <summary>
+    /// Creates and maintains the zone prefab of every custom zone (see the file header).
+    /// </summary>
     public partial class PaletteZoneSystem : GameSystemBase
     {
         /// <summary>Name prefix for every prefab this mod creates.</summary>
@@ -64,10 +48,10 @@ namespace CustomZones.Systems
         private const string CategoryName = "CZ_PaletteCategory";
         private static string CategoryIcon => CustomZones.Utilities.ZoneIcons.CategoryIcon;
 
-        /// <summary>Light-pink fill all palette zones use.</summary>
+        /// <summary>Fill colour of a zone whose colour cannot be read (light pink).</summary>
         private static readonly Color PaletteColor = new(1f, 0.72f, 0.85f, 1f);
 
-        /// <summary>Slightly deeper pink edge.</summary>
+        /// <summary>Edge colour that goes with <see cref="PaletteColor"/>.</summary>
         private static readonly Color PaletteEdgeColor = new(0.95f, 0.5f, 0.72f, 1f);
 
         private PrefabSystem m_PrefabSystem;
@@ -77,7 +61,7 @@ namespace CustomZones.Systems
         private int m_SyncedStorageVersion = -1;
         private List<PrefabBase> m_AllPrefabs;
 
-        /// <summary>paletteId -> created (hidden) zone prefab.</summary>
+        /// <summary>Custom zone id -> its zone prefab.</summary>
         private readonly Dictionary<string, ZonePrefab> m_PaletteZones = new();
 
         /// <summary>Locale entries (display names) registered so far.</summary>
@@ -95,7 +79,7 @@ namespace CustomZones.Systems
         /// <summary>Zones created mid-game whose toolbar button still has to be checked.</summary>
         private readonly List<ZonePrefab> m_PendingToolbarZones = new();
 
-        /// <summary>Palette ids whose zone button was removed from the toolbar (palette deleted).</summary>
+        /// <summary>Ids of deleted custom zones whose button was taken out of the toolbar.</summary>
         private readonly HashSet<string> m_HiddenZones = new();
 
         protected override void OnCreate()
@@ -119,14 +103,13 @@ namespace CustomZones.Systems
         }
 
         // ------------------------------------------------------------------
-        // Install (called from Mod.OnLoad — ByLaw timing)
+        // Install (called from Mod.OnLoad)
         // ------------------------------------------------------------------
 
         /// <summary>
-        /// Creates the category and one zone per existing palette while
-        /// ZoneSystem's first indexing pass still runs over freshly-Created
-        /// prefab entities. Must be called from <c>Mod.OnLoad</c>; safe to call
-        /// once (idempotent).
+        /// Creates the toolbar tab and one zone per existing custom zone, before
+        /// ZoneSystem's first pass indexes the new zone prefabs. Called from
+        /// <c>Mod.OnLoad</c>; calling it again does nothing.
         /// </summary>
         public void InstallAtLoad()
         {
@@ -147,7 +130,7 @@ namespace CustomZones.Systems
                 PushLocaleEntries();
                 m_SyncedStorageVersion = PaletteStorage.Instance.Version;
                 m_Installed = true;
-                Mod.Log.Info($"InstallAtLoad complete: category + {m_PaletteZones.Count} palette zone(s) created in OnLoad (ByLaw timing).");
+                Mod.Log.Info($"InstallAtLoad complete: category + {m_PaletteZones.Count} palette zone(s) created in OnLoad.");
             }
             catch (Exception ex)
             {
@@ -157,18 +140,16 @@ namespace CustomZones.Systems
 
         protected override void OnUpdate()
         {
-            // Backstop for mid-game palette create/delete. The primary real-time
-            // path is PaletteUISystem calling SyncPalettes() the instant storage
-            // changes (UIUpdate phase, exactly like ByLaw's CreateNewByLaw). Both
-            // are idempotent. Cheap no-op when nothing changed.
+            // Zones created or deleted during a game. PaletteUISystem already calls
+            // SyncPalettes as soon as the library changes; this catches anything
+            // else. Does nothing when nothing changed.
             if (m_SyncedStorageVersion != PaletteStorage.Instance.Version)
             {
                 SyncPalettes();
             }
 
-            // ByLaw spawn path: keep each palette zone entity's PaletteAllowedBuilding
-            // buffer in sync with its whitelist. PaletteZoneSpawnSystem reads this
-            // buffer to grow ONLY the whitelisted buildings on that zone's cells.
+            // Each zone entity's PaletteAllowedBuilding buffer: the buildings that
+            // may be born on it, read by PaletteZoneSpawnSystem.
             PopulateAllowedBuffers();
 
             ApplyColorChanges();
@@ -719,7 +700,7 @@ namespace CustomZones.Systems
                 : string.Empty;
 
         // ------------------------------------------------------------------
-        // Category tab in the zoning toolbar (ByLaw CreateAssetCategory)
+        // The "Custom Zones" tab of the zoning toolbar
         // ------------------------------------------------------------------
         private void EnsureCategory()
         {
@@ -817,19 +798,19 @@ namespace CustomZones.Systems
         }
 
         /// <summary>
-        /// Real-time entry point (called by PaletteUISystem the moment a palette
-        /// is created/edited): creates any newly added palettes' zones mid-game
-        /// via AddPrefab — the same path ByLaw's CreateNewByLaw uses, which
-        /// ZoneSystem indexes within a frame or two (no reload needed). Removal
-        /// is handled by leaving the (now-unreferenced) zone in place — a prefab
-        /// cannot be unregistered at runtime; painting simply stops targeting it.
-        /// Idempotent.
+        /// Brings the zone prefabs in line with the custom zone library (called by
+        /// PaletteUISystem as soon as it changes). New zones are added with
+        /// AddPrefab and indexed by ZoneSystem within a frame or two, without a
+        /// reload. A prefab cannot be removed while the game runs, so a deleted
+        /// zone keeps its prefab: its button leaves the toolbar, its cells were
+        /// unzoned when it was deleted, and its building list is emptied.
+        /// Calling it again with no change does nothing.
         /// </summary>
         public void SyncPalettes()
         {
             if (!m_Installed)
             {
-                // OnLoad hasn't run yet (e.g. called very early): install first.
+                // Mod.OnLoad has not installed the zones yet: do it now.
                 InstallAtLoad();
                 return;
             }
@@ -857,7 +838,7 @@ namespace CustomZones.Systems
                     }
                 }
 
-                // Deleted palettes: take their button out of the toolbar.
+                // Deleted zones: take their button out of the toolbar.
                 var toolbarChanged = m_PendingToolbarZones.Count > 0;
                 foreach (var kv in m_PaletteZones)
                 {
@@ -875,7 +856,7 @@ namespace CustomZones.Systems
 
                 if (changed)
                 {
-                    // Mirror ByLaw: reload the active locale so new prefab names show.
+                    // Reload the active locale so the names of the new zones show.
                     GameManager.instance.localizationManager.ReloadActiveLocale();
                 }
 
@@ -889,8 +870,8 @@ namespace CustomZones.Systems
         }
 
         // ------------------------------------------------------------------
-        // The ByLaw zone recipe (ScriptableObject.CreateInstance + copied base
-        // components + explicit area type + stripped Theme/Unlockable + fresh UI)
+        // Building a zone prefab: a new instance with the components of a game
+        // zone of the same type, its own area type, colour and toolbar entry
         // ------------------------------------------------------------------
         private ZonePrefab BuildZonePrefab(
             string zoneName,
@@ -917,9 +898,8 @@ namespace CustomZones.Systems
             zone.active = true;
             zone.isDirty = true;
 
-            // CRITICAL: the managed prefab's m_AreaType is what ZoneSystem reads
-            // to decide whether to assign a ZoneType index. Office is Industrial
-            // + m_Office.
+            // ZoneSystem only indexes a zone whose managed prefab has an area type.
+            // Offices are Industrial with m_Office set, as in the game.
             switch (category)
             {
                 case ZoneCategory.Commercial:
@@ -943,10 +923,10 @@ namespace CustomZones.Systems
             zone.m_Color = fillColor ?? PaletteColor;
             zone.m_Edge = edgeColor ?? PaletteEdgeColor;
 
-            // Strip the theme (so the zone is not restricted to EU/NA) and the
-            // milestone unlock (so it is always available, no Locked component,
-            // no unlock event needed). Removing from OUR component list does not
-            // touch the shared base-zone instances.
+            // No theme (the zone is not limited to one region) and no milestone
+            // (it is always available; PaletteZoneInitSystem adds a disabled
+            // Locked component only so the city saves it). Removing them from this
+            // zone's own component list does not change the game zone.
             zone.Remove<ThemeObject>();
             zone.Remove<Unlockable>();
 
@@ -982,9 +962,8 @@ namespace CustomZones.Systems
         }
 
         // ------------------------------------------------------------------
-        // Base-prefab resolution via reflection into PrefabSystem.m_Prefabs
-        // (available at OnLoad, unlike the BuildingIndexSystem which only runs
-        //  in PrefabUpdate). Same source ByLaw reads.
+        // Game zones and categories, read from PrefabSystem's prefab list (private,
+        // through reflection), which is already complete in Mod.OnLoad
         // ------------------------------------------------------------------
         private List<PrefabBase> AllPrefabs()
         {
@@ -1105,18 +1084,18 @@ namespace CustomZones.Systems
             name.IndexOf("Low Rent", StringComparison.OrdinalIgnoreCase) >= 0;
 
         // ------------------------------------------------------------------
-        // Whitelist -> PaletteAllowedBuilding buffer sync (consumed by the
-        // ByLaw-style PaletteZoneSpawnSystem)
+        // The buildings that may be born on each zone (PaletteAllowedBuilding
+        // buffers, read by PaletteZoneSpawnSystem)
         // ------------------------------------------------------------------
         private int m_BufferStorageVersion = -1;
         private int m_BufferIndexVersion = -1;
         private int m_ExpandedIndexVersion = -1;
 
         /// <summary>
-        /// Fills every palette zone entity's PaletteAllowedBuilding buffer with
-        /// the prefab entities of its whitelisted buildings. Re-runs when the
-        /// whitelist changes OR when the building index (which resolves names to
-        /// entities) is (re)built. Cheap no-op otherwise.
+        /// Fills every zone entity's PaletteAllowedBuilding buffer with the prefab
+        /// entities of the buildings that may be born on it. Runs again when a
+        /// zone's buildings change or when the building index (which turns names
+        /// into entities) is rebuilt; does nothing otherwise.
         /// </summary>
         private void PopulateAllowedBuffers()
         {
@@ -1144,11 +1123,9 @@ namespace CustomZones.Systems
             var missing = 0;
             var orphaned = 0;
 
-            // Iterate the zones we created (not the storage list): a zone whose
-            // palette was deleted mid-game must have its whitelist CLEARED so it
-            // stops growing buildings on cells still painted with it. A prefab
-            // cannot be unregistered at runtime, but an empty buffer makes the
-            // orphaned zone inert.
+            // Every zone prefab created (not the library): a zone deleted during
+            // the game keeps its prefab, so its buffer is emptied and nothing
+            // more grows on it.
             foreach (var kv in m_PaletteZones)
             {
                 if (!m_PrefabSystem.TryGetEntity(kv.Value, out var zoneEntity) ||

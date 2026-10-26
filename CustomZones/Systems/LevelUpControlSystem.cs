@@ -1,6 +1,6 @@
-// <copyright file="LevelUpControlSystem.cs">
-// Custom Zones - Licensed under the MIT license.
-// </copyright>
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
 
 namespace CustomZones.Systems
 {
@@ -92,9 +92,11 @@ namespace CustomZones.Systems
     /// swaps the prefab later. This system runs every frame just before that
     /// swap and, for buildings standing on a custom zone:
     /// <list type="bullet">
-    /// <item>level-up blocked: removes the UnderConstruction (the building keeps its level);</item>
-    /// <item>otherwise: a building ticked for this zone at the next level that fits, its own
-    /// design first with "keep design", or no level-up when there is none.</item>
+    /// <item>level up off: removes the UnderConstruction (the building keeps its level);</item>
+    /// <item>like the game: a building ticked for this zone at the next level that fits,
+    /// its own design first with "prefer same design", or no level-up when there is none;</item>
+    /// <item>skip levels: the next ticked level of the building's own design, after as many
+    /// level-up rounds as the skipped levels take in the game (see <see cref="LevelSkipProgress"/>).</item>
     /// </list>
     /// The game has already spent the building's condition on the level-up, so a
     /// cancelled one is not retried every tick.
@@ -111,10 +113,16 @@ namespace CustomZones.Systems
     /// taller than the zone cells allow there (bridges, power lines...).
     /// </para>
     /// <para>
-    /// It also runs the "level up" button of the building panel: instead of asking
-    /// the game (whose level-up pass only runs ~16 times a day), it picks the next
-    /// building right away with the same rules and starts the swap, which the game
-    /// finishes on its next construction tick (about a second).
+    /// When the game's own level-up finds no building one level up for the lot
+    /// (possible when a design skips levels), the zone's choice is applied once the
+    /// materials have arrived (<see cref="CheckMissedLevelUps"/>).
+    /// </para>
+    /// <para>
+    /// It also runs the "level up" and "choose level" buttons of the building
+    /// panel: instead of asking the game (whose level-up pass only runs about 16
+    /// times a day), it picks the building right away with the same rules and
+    /// starts the swap, which the game finishes on its next construction tick
+    /// (about a second).
     /// </para>
     /// </remarks>
     public partial class LevelUpControlSystem : GameSystemBase
@@ -534,7 +542,7 @@ namespace CustomZones.Systems
         /// The prefab the building becomes at the next level, or Entity.Null to keep
         /// its level. Like the game, one level at a time and only a building that
         /// fits (lot, road access, goods, homes, height); unlike the game, only the
-        /// buildings ticked for this zone at that level. With "keep design" its own
+        /// buildings ticked for this zone at that level. With "prefer same design" its own
         /// design wins when it is ticked and fits; otherwise any of them, at random.
         /// </summary>
         private Entity ChooseNext(Entity building, BuildingEntry from, PaletteDefinition zone)
@@ -1053,8 +1061,8 @@ namespace CustomZones.Systems
         /// <summary>
         /// Level selector: turns the selected building into one of the given level
         /// now, up or down. Its own design when it has that level, otherwise
-        /// another building of its zone at that level (a custom zone's "keep
-        /// design" is overridden: the player picked the level).
+        /// another building of its zone at that level (a custom zone's growth
+        /// settings are overridden: the player picked the level).
         /// </summary>
         private void SetSelectedBuildingLevel(int level)
         {

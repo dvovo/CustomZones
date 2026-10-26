@@ -1,3 +1,7 @@
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
 // Typed bindings to PaletteUISystem (C#).
 // useValue/bindValue/trigger pattern follows Platter's gameBindings.ts.
 import { bindValue, trigger } from "cs2/api";
@@ -59,7 +63,7 @@ export interface ZoneEntry {
   buildingCount: number;
   levelUp: boolean;
   keepDesign: boolean;
-  /** 0 = born at level 1 like the game, 1 = born at any ticked level. */
+  /** Growth mode: 0 = like the game, 1 = skip levels. */
   growth: number;
 }
 

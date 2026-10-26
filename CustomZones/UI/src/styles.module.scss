@@ -1,3 +1,7 @@
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
 // Custom Zones editor - side panel styled with the game's own design tokens
 // (--panelColorNormal, --sectionBackgroundColor, --accentColorNormal,
 // --fontSize*, ...). All sizes in rem: the game scales 1rem ~ 1px at 1080p.
@@ -533,8 +537,8 @@
   opacity: 0.7;
 }
 
-// Card footprint = 112 + 8 margin = 120 wide, 144 + 8 = 152 high
-// (CARD_WIDTH / CARD_HEIGHT in FamilyBrowser.tsx).
+// Base card size; FamilyBrowser.tsx sets the real width, height and picture
+// size inline (cards stretch to fill the grid).
 .card {
   position: relative;
   display: flex;

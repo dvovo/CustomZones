@@ -1,5 +1,6 @@
-// <copyright file="PaletteZoneSpawnSystem.cs">
-// CustomZones - Licensed under the MIT license.
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
 //
 // The zone spawner of the city. It replaces the game's ZoneSpawnSystem
 // (disabled in Mod.OnLoad) and runs at the same pace, so the city grows at the
@@ -12,8 +13,8 @@
 // Both feed the same three candidate queues, and the game's SpawnBuildingJob
 // then spawns the single best candidate of each type, exactly like the game.
 //
-// Spawn-from-whitelist idea from FutureProg/ZoningByLawMod (no license file).
-// </copyright>
+// The idea of spawning from a list of allowed buildings comes from ZoningByLaw
+// by FutureProg (reimplemented, not copied).
 
 namespace CustomZones.Systems
 {
@@ -37,6 +38,10 @@ namespace CustomZones.Systems
     using CustomZones.Components;
     using BuildingData = Game.Prefabs.BuildingData;
 
+    /// <summary>
+    /// The city's zone spawner, for the game's zones and the custom zones (see the
+    /// file header).
+    /// </summary>
     public partial class PaletteZoneSpawnSystem : GameSystemBase
     {
         private EntityQuery m_VacantLotsQuery;
@@ -436,6 +441,11 @@ namespace CustomZones.Systems
             Dependency = spawnHandle;
         }
 
+        /// <summary>
+        /// The game's spawn evaluation for the lots of custom zones: each chosen
+        /// building that fits a free lot is scored by the rules of its own zone and
+        /// offered to the queue of its type.
+        /// </summary>
         [BurstCompile]
         public struct EvaluateSpawnAreas : IJobChunk
         {

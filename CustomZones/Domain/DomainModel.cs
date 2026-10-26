@@ -1,7 +1,8 @@
-// <copyright file="DomainModel.cs">
-// CustomZones - Licensed under the MIT license.
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
 // Filtering model inspired by FindIt-CSII (Domain/Filters.cs, Domain/Enums).
-// </copyright>
 
 namespace CustomZones.Domain
 {
@@ -25,15 +26,12 @@ namespace CustomZones.Domain
         Office = 5,
     }
 
-    /// <summary>
-    /// Density classification, mirroring FindIt's ZoneTypeFilter.
-    /// </summary>
     /// <summary>How the buildings of a custom zone are born and level up.</summary>
     public enum GrowthMode
     {
         /// <summary>
         /// Like the game: born at level 1, then up one level at a time into a
-        /// building ticked for the next level (its own design first with "keep design").
+        /// building ticked for the next level (its own design first with "prefer same design").
         /// </summary>
         LikeGame = 0,
 
@@ -45,6 +43,9 @@ namespace CustomZones.Domain
         SkipLevels = 1,
     }
 
+    /// <summary>
+    /// Density classification, mirroring FindIt's ZoneTypeFilter.
+    /// </summary>
     public enum DensityType
     {
         Any = 0,
@@ -120,21 +121,20 @@ namespace CustomZones.Domain
     }
 
     /// <summary>
-    /// A saved zoning palette ("plantilla de zonificación"):
-    /// a named whitelist of building prefab names.
-    /// Serialized to JSON in ModsData and listed in the mod submenu.
+    /// A custom zone ("palette" in the code): its name, look, the game zone it
+    /// behaves like and the buildings chosen for it. Saved as JSON in
+    /// ModsData/CustomZones/palettes.json.
     /// </summary>
     public class PaletteDefinition
     {
-        /// <summary>Stable unique id (GUID string). Districts reference its hash.</summary>
+        /// <summary>Stable unique id (GUID string); also names the zone prefab (CZ_Zone_&lt;id&gt;).</summary>
         public string Id = Guid.NewGuid().ToString("N");
 
         public string Name = "New Palette";
 
         /// <summary>
-        /// Zone area type this palette belongs to. A palette is exactly one
-        /// area type so its zone draws the correct demand and gets a valid
-        /// ZoneType index (ZoneSystem skips AreaType.None).
+        /// The game zone type this zone behaves like. Its zone prefab gets that
+        /// area type, which ZoneSystem needs to give it a ZoneType index.
         /// </summary>
         public ZoneCategory Category = ZoneCategory.Residential;
 
@@ -175,7 +175,7 @@ namespace CustomZones.Domain
         /// </summary>
         public string Icon = string.Empty;
 
-        /// <summary>Legacy (v0.1): individual prefab names. Migrated to <see cref="Families"/> on load.</summary>
+        /// <summary>Old format: individual prefab names. Converted to <see cref="Families"/> on load.</summary>
         public HashSet<string> AllowedBuildings = new();
     }
 

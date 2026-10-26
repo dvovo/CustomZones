@@ -1,8 +1,11 @@
-// <copyright file="Mod.cs">
-// CustomZones - Selective zoning areas for Cities: Skylines II
-// Licensed under the MIT license.
-// Patterns inspired by CS2-Platter (Luca Rager, MIT) and FindIt-CSII (T. D. W., MIT).
-// </copyright>
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
+// Custom Zones: create your own zone types and choose exactly which growable
+// buildings grow and level up in each of them, with the game's own demand.
+// Some patterns are inspired by CS2-Platter (Luca Rager) and FindIt-CSII
+// (T. D. W.), both MIT licensed.
 
 namespace CustomZones
 {
@@ -14,6 +17,10 @@ namespace CustomZones
     using CustomZones.Systems;
     using CustomZones.Utilities;
 
+    /// <summary>
+    /// Entry point of Custom Zones: loads the settings and translations and
+    /// registers the mod's systems.
+    /// </summary>
     public class Mod : IMod
     {
         public const string Id = "CustomZones";
@@ -38,75 +45,65 @@ namespace CustomZones
             // coui://customzones/ host for the generated zone icons.
             ZoneIcons.RegisterHost();
 
-            // --- Systems registration ---
-
-            // Indexes every spawnable (growable) building prefab with its
-            // zone category, density, lot size etc. Runs once per game load.
+            // Indexes every growable building prefab (zone category, density,
+            // lot size, level...). Rebuilt when new buildings are registered.
             updateSystem.UpdateAfter<BuildingIndexSystem>(SystemUpdatePhase.PrefabUpdate);
 
-            // Generates icons for the buildings the game itself can never show
-            // one for (see IconGeneratorSystem). Runs on the main thread, a
-            // couple of renders per frame, and caches the PNGs on disk so this
-            // only ever happens once per building.
+            // Draws a simple picture for the buildings the game has no icon for
+            // (see IconGeneratorSystem). A few per frame on the main thread,
+            // cached on disk, so each building is drawn only once.
             updateSystem.UpdateAt<IconGeneratorSystem>(SystemUpdatePhase.UIUpdate);
 
-            // Turns every palette into a real paintable zone. Zone creation for
-            // pre-existing palettes happens in InstallAtLoad() BELOW (ByLaw
-            // timing); this registration drives the REAL-TIME mid-game creation.
-            // CRITICAL: it MUST run BEFORE the vanilla ZoneSystem inside the
-            // PrefabUpdate phase. PrefabSystem.OnUpdate drives that phase, and a
-            // mid-game AddPrefab creates the zone entity synchronously with the
-            // Created tag; if our system ran AFTER ZoneSystem, ZoneSystem would
-            // miss it that frame and Created clears before the next pass (which
-            // is exactly why mid-game zones stayed area=None, index=0). Running
-            // before ZoneSystem lets it index the new zone in the SAME frame.
+            // Turns every custom zone into a real, paintable zone prefab. The zones
+            // that already exist are created in InstallAtLoad (below); this system
+            // creates the ones added during a game. It must run before the game's
+            // ZoneSystem: AddPrefab creates the zone entity with the Created tag,
+            // and ZoneSystem only gives a zone its ZoneType index on the frame it
+            // sees that tag.
             updateSystem.UpdateBefore<PaletteZoneSystem, global::Game.Prefabs.ZoneSystem>(SystemUpdatePhase.PrefabUpdate);
 
-            // Transfers managed data to the palette zone entity AFTER ZoneSystem
-            // has assigned its index (ByLaw pattern): sets the zone flags + hash.
+            // Finishes each new zone entity once ZoneSystem has indexed it: lot
+            // corner flags, and what lets a saved city keep its painted cells.
             updateSystem.UpdateAfter<PaletteZoneInitSystem, global::Game.Prefabs.ZoneSystem>(SystemUpdatePhase.PrefabUpdate);
 
-            // The ByLaw-model spawner: grows ONLY each palette's whitelisted
-            // buildings on its zone's cells, by demand, reusing the vanilla
-            // SpawnBuildingJob. Runs just BEFORE the vanilla ZoneSpawnSystem.
+            // The zone spawner: the game's own evaluation for the game's zones, and
+            // the same rules restricted to each custom zone's chosen buildings,
+            // feeding the game's SpawnBuildingJob.
             updateSystem.UpdateBefore<PaletteZoneSpawnSystem, ZoneSpawnSystem>(SystemUpdatePhase.GameSimulation);
 
-            // PaletteZoneSpawnSystem runs the game's own evaluation for the vanilla
-            // zones too and spawns from one shared set of candidates, so the city
-            // grows at the game's rate: the vanilla spawner must not run as well.
+            // PaletteZoneSpawnSystem spawns for the game's zones too, from one shared
+            // set of candidates, so the city grows at the game's own rate: the
+            // game's spawner must not run as well.
             updateSystem.World.GetOrCreateSystemManaged<ZoneSpawnSystem>().Enabled = false;
 
-            // Level-up rules of each custom zone (blocked / keep design / within the zone),
-            // applied to the game's level-up just before BuildingConstructionSystem swaps the prefab.
+            // Level-up rules of each custom zone (level up on or off, prefer same
+            // design, skip levels) and the level buttons of the building panel,
+            // applied just before BuildingConstructionSystem swaps the prefab.
             updateSystem.UpdateBefore<LevelUpControlSystem, BuildingConstructionSystem>(SystemUpdatePhase.GameSimulation);
 
-            // UI bindings (panel, palettes submenu, filters, virtual scroll).
+            // UI bindings of the panel (zones, building browser, filters).
             updateSystem.UpdateAt<PaletteUISystem>(SystemUpdatePhase.UIUpdate);
 
-            // The vanilla ZoneCheckSystem is replaced by CustomZoneCheckSystem. A
-            // building grown on a custom zone keeps its ORIGINAL zone type, so the
-            // vanilla check would see the cell's zone type != the building's and
-            // condemn it at once. The replacement is the same check that also
-            // accepts a custom zone as the zones it behaves like.
+            // The game's ZoneCheckSystem is replaced by CustomZoneCheckSystem. A
+            // building grown on a custom zone keeps its own zone type, so the game's
+            // check would condemn it at once. The replacement is the same check,
+            // which also accepts a custom zone for the buildings it holds.
             updateSystem.UpdateAt<CustomZoneCheckSystem>(SystemUpdatePhase.ModificationEnd);
 
-            // Removes an obsolete table from cities saved with a test build (zones are kept across
-            // save / load by saving the zone prefabs: see PaletteZoneInitSystem).
+            // Removes an obsolete table from cities saved with a test build (zones
+            // are kept by saving the zone prefabs: see PaletteZoneInitSystem).
             updateSystem.UpdateBefore<CustomZoneSaveSystem, CustomZoneCheckSystem>(SystemUpdatePhase.ModificationEnd);
 
             // Growable buildings placed by hand (placement tool, Find It...) are
-            // tagged before the zone check sees them, so it never condemns them.
+            // tagged before the zone check sees them, so it does not condemn them.
             updateSystem.UpdateBefore<PlacedByHandSystem, CustomZoneCheckSystem>(SystemUpdatePhase.ModificationEnd);
             updateSystem.World
                 .GetOrCreateSystemManaged<global::Game.Buildings.ZoneCheckSystem>()
                 .Enabled = false;
 
-            // CRITICAL (ByLaw timing): create the category + painter + one zone
-            // per palette NOW, in OnLoad. This is inside the persistent world's
-            // initial prefab window where ZoneSystem's first InitializeZonePrefabs
-            // pass runs over freshly-Created zone prefabs and assigns each a real
-            // ZoneType index (which then persists). Creating them later missed
-            // that clean window and the zones stayed area=None, index=0 forever.
+            // The toolbar tab and one zone per existing custom zone are created now,
+            // in OnLoad, so ZoneSystem's first pass indexes them together with the
+            // game's own zones and they are ready before any city loads.
             updateSystem.World
                 .GetOrCreateSystemManaged<PaletteZoneSystem>()
                 .InstallAtLoad();

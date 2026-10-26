@@ -2,7 +2,10 @@ blank_issues_enabled: false
 contact_links:
   - name: Custom Zones on Paradox Mods
     url: https://mods.paradoxplaza.com/mods/165018/Windows
-    about: Download the mod, read how to use it, and join the discussion on its page.
+    about: Download the mod and read how to use it.
+  - name: Questions and discussion
+    url: https://forum.paradoxplaza.com/forum/threads/mod-beta-custom-zones-discussion-feedback.1947164/
+    about: Ask questions and share ideas in the mod's forum thread (also shown on its Paradox Mods page).
   - name: Documentation
     url: https://github.com/dvovo/CustomZones#readme
     about: Technical documentation of the mod.

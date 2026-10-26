@@ -1,6 +1,6 @@
-// <copyright file="IconLibrary.cs">
-// Custom Zones - Licensed under the MIT license.
-// </copyright>
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
 
 namespace CustomZones.Storage
 {

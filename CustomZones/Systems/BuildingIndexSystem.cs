@@ -1,15 +1,14 @@
-// <copyright file="BuildingIndexSystem.cs">
-// CustomZones - Licensed under the MIT license.
-// Discovery/classification logic closely modeled on FindIt-CSII's
-// ZonedBuildingPrefabCategoryProcessor + PrefabIndexingSystem (MIT):
-//   - density resolved from ZonePropertiesData (NOT the zone name), so region
-//     packs (JP/NE/SW/UK...) whose zones do not follow the vanilla naming still
-//     classify correctly and show up in the browser;
-//   - per-building thumbnail via ImageSystem.GetThumbnail (the real generated
-//     render, prefab.thumbnailUrl), with the zone icon only as a fallback/badge;
-//   - re-indexes whenever the spawnable-building count grows, so buildings from
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
+// The index of growable buildings. The way buildings are found and classified
+// follows FindIt-CSII (ZonedBuildingPrefabCategoryProcessor and
+// PrefabIndexingSystem, MIT License):
+//   - density comes from the zone's ZonePropertiesData, not from its name, so
+//     region packs whose zones are named differently are classified correctly;
+//   - the index is rebuilt whenever the number of growable buildings grows, so
 //     packs that finish loading after the first pass are picked up.
-// </copyright>
 
 namespace CustomZones.Systems
 {
@@ -123,13 +122,11 @@ namespace CustomZones.Systems
                 return;
             }
 
-            // NOTE: newly generated icons do NOT trigger a re-index. Rebuilding
-            // the whole index (9k+ buildings, sort + LINQ) once per generated
-            // icon made the game crawl. IconGeneratorSystem now patches the
-            // affected entry in place via ApplyGeneratedIcon and bumps the
-            // version only occasionally.
+            // New generated pictures do not rebuild the index (9000+ buildings):
+            // IconGeneratorSystem updates the entry in place (ApplyGeneratedIcon)
+            // and bumps the version now and then.
 
-            // Scheduled re-indexes to capture late icon rewrites (AIL).
+            // A few scheduled rebuilds pick up icons Asset Icon Library sets late.
             if (m_RefreshesDone < RefreshFrames.Length)
             {
                 m_FramesSinceIndex++;
@@ -392,13 +389,11 @@ namespace CustomZones.Systems
                 IsMod = buildingPrefab.isSubscribedMod,
                 IsBuiltin = buildingPrefab.isBuiltin,
 
-                // Tier 1 (normal mechanism) + Tier 2 (our runtime generation):
-                // see ResolveThumbnail.
+                // The card picture: see ResolveThumbnail.
                 Thumbnail = ResolveThumbnail(buildingPrefab),
 
-                // Always-present fallback: rendered BEHIND the thumbnail and
-                // swapped in on error, so a card is never blank. Also the corner
-                // zone badge. (FindIt layers fallbackThumbnail under the render.)
+                // Drawn behind the picture and shown if it fails, so a card is
+                // never blank (as FindIt does); also the zone badge of the card.
                 FallbackThumbnail = string.IsNullOrEmpty(zoneIcon) ? categoryIcon : zoneIcon,
             };
 
@@ -443,19 +438,15 @@ namespace CustomZones.Systems
         }
 
         /// <summary>
-        /// Layered thumbnail resolution ("firewall" for iconless buildings):
-        ///  1. The normal mechanism — the prefab's own icon, which is what
-        ///     AssetIconLibrary rewrites to coui://ail/... for the buildings it
-        ///     covers. Those render fine, so they always win and nothing changes
-        ///     for them.
-        ///  2. Otherwise ImageSystem returns a `thumbnail://ThumbnailCamera/...`
-        ///     URL, which is a DEAD END: ThumbnailCache never renders, it only
-        ///     looks up pre-baked atlases, so such a URL shows nothing in a mod
-        ///     panel. For those we use our own generated PNG when it exists, and
-        ///     otherwise queue the building to be rendered (once, then cached on
-        ///     disk forever).
-        ///  3. If generation also fails, Thumbnail stays empty and the UI draws
-        ///     a distinctive procedural icon.
+        /// The picture of a building, in order:
+        ///  1. The prefab's own icon when it is a real file (coui://ail/... from
+        ///     Asset Icon Library, assetdb://...).
+        ///  2. Otherwise ImageSystem only gives a thumbnail://ThumbnailCamera/... URL,
+        ///     which shows nothing in a mod panel (the game's thumbnail cache only
+        ///     looks up pre-baked atlases). Then: Building Icon Generator's picture
+        ///     when that mod is installed; otherwise the mod's own generated picture
+        ///     (IconGeneratorSystem), which is requested when it does not exist yet.
+        ///  3. Empty while there is none: the UI draws a placeholder.
         /// </summary>
         private string ResolveThumbnail(BuildingPrefab buildingPrefab)
         {
@@ -468,9 +459,9 @@ namespace CustomZones.Systems
                 return thumbnail;
             }
 
-            // Building Icon Generator, when installed, provides real pictures of every
-            // building: use its 128 px thumbnail. (Missing ones are requested by the
-            // editor for the cards actually on screen.)
+            // Building Icon Generator, when installed, has a real picture of every
+            // building: its 128 px thumbnail. Missing ones are requested by the
+            // panel for the cards on screen.
             if (BigIcons.IsInstalled)
             {
                 if (BigIcons.TryGetThumbnailUri(buildingPrefab.name, out var bigThumbnail))

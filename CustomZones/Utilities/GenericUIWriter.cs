@@ -1,7 +1,7 @@
-﻿// <copyright file="GenericUIWriter.cs" company="Luca Rager (adapted for CustomZones)">
-// Copyright (c) Luca Rager. All rights reserved.
-// Licensed under the MIT license. See LICENSE file in the project root for full license information.
-// </copyright>
+﻿// Adapted from GenericUIWriter.cs of CS2-Platter by Luca Rager (MIT License).
+// Original code: Copyright (c) Luca Rager.
+// Changes: Copyright (c) 2026 dvovo. https://mods.paradoxplaza.com/authors/dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
 
 namespace CustomZones.Utilities {
     using System;
@@ -11,6 +11,7 @@ namespace CustomZones.Utilities {
     using Unity.Entities;
     using UnityEngine;
 
+    /// <summary>Writes any value of <typeparamref name="T"/> to the UI by reflection.</summary>
     public class GenericUIWriter<T> : IWriter<T> {
         /// <inheritdoc/>
         public void Write(IJsonWriter writer, T value) {

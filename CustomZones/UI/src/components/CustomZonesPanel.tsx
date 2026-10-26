@@ -1,3 +1,7 @@
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
 // Custom Zones editor, built from the game's UI components:
 //
 //   main panel (docked right, like the game's info panels)

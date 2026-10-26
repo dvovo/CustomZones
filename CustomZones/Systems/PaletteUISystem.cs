@@ -1,8 +1,9 @@
-// <copyright file="PaletteUISystem.cs">
-// Custom Zones - Licensed under the MIT license.
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
 // Binding architecture follows Platter's P_UISystem and FindIt's
 // FindItUISystem (ValueBindingHelper + TriggerBinding + virtual scroll).
-// </copyright>
 
 namespace CustomZones.Systems
 {

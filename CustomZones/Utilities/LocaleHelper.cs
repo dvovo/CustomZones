@@ -1,7 +1,8 @@
-// <copyright file="LocaleHelper.cs">
-// CustomZones - Licensed under the MIT license.
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
 // Embedded-resource locale loading pattern follows FindIt's LocaleHelper.
-// </copyright>
 
 namespace CustomZones.Utilities
 {
@@ -14,6 +15,7 @@ namespace CustomZones.Utilities
     using System.Linq;
     using System.Reflection;
 
+    /// <summary>Loads the mod's translations and resolves building names.</summary>
     public static class LocaleHelper
     {
         private static Dictionary<string, Dictionary<string, string>> _locales;

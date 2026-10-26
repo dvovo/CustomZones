@@ -1,70 +1,32 @@
-// <copyright file="IconGeneratorSystem.cs">
-// CustomZones - Licensed under the MIT license.
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
 //
-// RUNTIME ICON GENERATION — the "firewall" for buildings the game itself can
-// never show an icon for.
+// Pictures for the buildings the game has no icon for.
 //
-// WHY THIS EXISTS (decompiled ground truth, 2026-08-02):
-//   Game.UI.Thumbnails.ThumbnailCache.GetThumbnail() does NOT render anything.
-//   It is a pure dictionary lookup over entries loaded from pre-baked *atlas*
-//   assets, and its Update() is literally empty. So a `thumbnail://ThumbnailCamera/<id>`
-//   URL only resolves if someone already baked that icon into an atlas. A
-//   building that is in no atlas (e.g. EU_MixedOldTown01_L1_1x2) can NEVER get
-//   an image from the game — which is why AssetIconLibrary ships ~8000
-//   pre-rendered PNGs and why every mod (FindIt included) falls back to a
-//   generic placeholder for the rest. The game has no runtime thumbnail
-//   generation at all.
+// The game's thumbnail cache (Game.UI.Thumbnails.ThumbnailCache) does not render
+// anything: it only looks icons up in pre-baked atlases, so a building that is in
+// no atlas never gets a picture from the game. When Building Icon Generator is
+// not installed, this system draws a simple one for those buildings:
+//   - the building's meshes (RenderPrefab.ObtainMeshes / ObtainMaterials) are
+//     rendered by an off-screen camera into a RenderTexture;
+//   - the result is keyed out, trimmed and saved as a PNG in
+//     {UserData}/ModsData/CustomZones/GeneratedIcons/BuildingPrefab.<name>.png;
+//   - the folder is served to the UI as coui://czicons/ (the same mechanism and
+//     file naming Asset Icon Library uses for coui://ail/).
 //
-// WHAT WE DO INSTEAD (all public APIs):
-//   RenderPrefab.ObtainMeshes()    -> UnityEngine.Mesh[]   (GeometryAsset : IAssetData<Mesh[]>)
-//   RenderPrefab.ObtainMaterials() -> UnityEngine.Material[]
-//   ... rendered by our own off-screen Camera into a RenderTexture, read back,
-//   encoded to PNG and written to
-//       {UserData}/ModsData/CustomZones/GeneratedIcons/BuildingPrefab.<name>.png
-//   then served to the cohtml UI through our own host location
-//       coui://czicons/BuildingPrefab.<name>.png
-//   (UIManager.defaultUISystem.AddHostLocation — the very same mechanism
-//   AssetIconLibrary uses for coui://ail/). The file naming mirrors AIL's
-//   'PrefabType.PrefabName.png' convention on purpose.
+// The PNGs stay on disk, so each building is drawn only once; deleting the
+// folder (or a file) draws them again. Missing pictures are drawn while the
+// loading screen is up, and later ones a few per frame, with the buildings on
+// screen first. A building that cannot be drawn is not tried again and gets a
+// procedural placeholder in the UI.
 //
-// CACHING (per the user's design, which is the standard professional pattern):
-//   The PNGs persist on disk, so generation is a ONE-TIME cost per building.
-//   On every later start we just list the folder and skip everything already
-//   there; delete the folder (or single files) and they are regenerated. The
-//   flow is: no icon from the normal mechanism AND not on disk -> generate+save.
-//
-// COST CONTROL: work is spread over frames so a first run never stalls the
-// game, and each render is individually guarded — a building that fails to
-// render is remembered as failed and never retried, and the UI draws a
-// distinctive procedural icon for it instead.
-//
-// WHY THE ICONS ARE A NEUTRAL "WHITE MODEL" AND NOT PHOTO-REALISTIC
-// (three separate approaches were tried and disproved, do not retry them):
-//   1. Use the game's materials as-is -> murky grey. CS2 surfaces are virtual-
-//      textured: `SyncToUnityMaterial` deliberately does NOT bind those textures,
-//      it enables the ENABLE_VT shader keyword and lets the streaming system feed
-//      them. An off-screen camera never runs the VT resolve pass.
-//   2. Load the textures and bind them ourselves -> impossible. The TextureAsset
-//      of a VT property is a DUMMY (`isDummy => database == null`), so it has no
-//      file and no data; `GetReadStream()` throws instantly.
-//   3. Load the PRE-PROCESSED SOURCE textures by GUID -> also impossible. The
-//      property -> stack -> layer -> GUID chain resolves correctly, but
-//      `TryGetAsset` returns false for every GUID: the source textures are
-//      build-time only, the shipped game contains just the baked VT store.
-//   Multi-frame VT warm-up was also measured and failed: average chroma stayed
-//   at ~0.1/255 (pure greyscale) on EVERY building.
-//
-//   IMPORTANT EXCEPTION (measured): a MINORITY of surfaces are NOT virtual-
-//   textured — their TextureAssets are real, loadable files. Those DO bind and
-//   DO render in full colour; IceflakeArena01 is one (its icon has genuine
-//   orange/cyan/red pixels in the interior, no magenta). So the pipeline is
-//   correct and does produce colour whenever the data exists; what is missing
-//   for ordinary growables is the DATA, not the mechanism. `m_TexturedSurfaces`
-//   counts how many surfaces hit this path.
-//   At runtime the pixels exist ONLY inside the VT store, reachable solely
-//   through the game's own rendering path — which is exactly why
-//   AssetIconCreator spawns the building in the world and screenshots the game.
-// </copyright>
+// Why the pictures are a neutral "white model": the textures of most building
+// surfaces exist only in the game's virtual-texturing (VT) store. Their
+// TextureAssets are placeholders without data, and the VT store is only fed
+// through the game's own rendering of the world, never to an off-screen camera.
+// Those surfaces are drawn with a neutral matte material instead. The few
+// surfaces whose textures are ordinary assets are drawn with them, in colour.
 
 namespace CustomZones.Systems
 {
@@ -84,12 +46,16 @@ namespace CustomZones.Systems
     using UnityEngine;
     using UnityEngine.Rendering.HighDefinition;
 
+    /// <summary>
+    /// Draws and caches a picture of every building the game has no icon for
+    /// (see the file header).
+    /// </summary>
     public partial class IconGeneratorSystem : GameSystemBase
     {
         /// <summary>coui host name; icons resolve as coui://czicons/&lt;file&gt;.</summary>
         public const string HostName = "czicons";
 
-        /// <summary>AIL-compatible file prefix.</summary>
+        /// <summary>File name prefix, as Asset Icon Library names its files.</summary>
         private const string FilePrefix = "BuildingPrefab.";
 
         /// <summary>
@@ -99,9 +65,8 @@ namespace CustomZones.Systems
         private const int PipelineVersion = 15;
 
         /// <summary>
-        /// Render resolution. Raised to 256 for detail (the cards draw at ~150 px
-        /// and these are photo-like renders): quality was worth more than bytes
-        /// here, and the trim/quantize pass keeps the files reasonable.
+        /// Render resolution, in pixels. The cards draw the pictures at about
+        /// 150 px; trimming and quantising keep the files small.
         /// </summary>
         private const int IconSize = 256;
 
@@ -109,8 +74,9 @@ namespace CustomZones.Systems
         private const string VirtualTexturingKeyword = "ENABLE_VT";
 
         /// <summary>
-        /// SurfaceAsset -> our VT-free material clone. Thousands of buildings
-        /// share the same surfaces, so converting each one once matters.
+        /// SurfaceAsset -> the material used to draw it (a clone without virtual
+        /// texturing, or the neutral material). Many buildings share surfaces,
+        /// so each one is converted once.
         /// </summary>
         private readonly Dictionary<SurfaceAsset, Material> m_IconMaterials = new();
 
@@ -133,11 +99,10 @@ namespace CustomZones.Systems
         private const int CropPadding = 2;
 
         /// <summary>
-        /// Backdrop colour, keyed out after rendering. Magenta because no
-        /// building surface is magenta — AssetIconCreator ships a Magenta.png
-        /// backdrop for exactly the same reason. With a BLACK backdrop every
-        /// dark roof and shadowed wall matched the key and got punched out,
-        /// which is what produced the see-through walls.
+        /// Backdrop colour, keyed out after rendering. Magenta, because no
+        /// building surface has that colour (Asset Icon Creator uses a magenta
+        /// backdrop for the same reason); a dark backdrop would also key out
+        /// dark roofs and shaded walls.
         /// </summary>
         private static readonly Color ChromaKeyColor = new(1f, 0f, 1f, 1f);
 
@@ -184,11 +149,10 @@ namespace CustomZones.Systems
         private long m_BytesWritten;
 
         /// <summary>
-        /// Frames each subject is rendered before capturing.
-        /// Kept at 1: the multi-frame virtual-texturing warm-up was TESTED AND
-        /// FAILED — measured chroma stayed at ~0.1/255 (pure greyscale) on every
-        /// building, proving VT streaming never feeds a manually-rendered
-        /// off-screen camera. Extra frames bought nothing but a 6x slowdown.
+        /// Frames each building is rendered before it is captured. One is enough:
+        /// waiting more frames does not bring virtual textures to an off-screen
+        /// camera (see the file header). With more than one, the blocking pass
+        /// during loading is skipped, because it cannot wait for frames.
         /// </summary>
         private static readonly int WarmupFrames = 1;
 
@@ -210,12 +174,10 @@ namespace CustomZones.Systems
         private const float RimLightLux = 5000f;
 
         /// <summary>
-        /// Fixed exposure (EV100). Derived, not guessed: a surface of albedo ~0.5
-        /// lit by the key reflects ≈ lux * 0.5 / π ≈ 4000 nits, and middle grey
-        /// sits at EV100 = log2(nits * 100 / 12.5) ≈ 15. We aim slightly brighter
-        /// than middle grey. The previous 13.3 was ~1.5 stops over, which is why
-        /// lit roofs burned out to white.
-        /// Raise this to darken the render, lower it to brighten.
+        /// Fixed exposure (EV100). A surface of albedo ~0.5 lit by the key light
+        /// reflects about lux * 0.5 / π ≈ 4000 nits, and middle grey sits at
+        /// EV100 = log2(nits * 100 / 12.5) ≈ 15; the value is set slightly
+        /// brighter than that. Raise it to darken the render, lower it to brighten.
         /// </summary>
         private const float FixedExposureEV = 14.6f;
 
@@ -235,9 +197,9 @@ namespace CustomZones.Systems
         private int m_QueueCursor;
 
         /// <summary>
-        /// Buildings the user is looking at RIGHT NOW. Always drained before the
-        /// background queue, so whatever is on screen gets its icon within a
-        /// frame or two instead of waiting for thousands of unrelated prefabs.
+        /// Buildings the player is looking at now. They are drawn before the
+        /// background queue, so whatever is on screen gets its picture within a
+        /// frame or two.
         /// </summary>
         private readonly List<BuildingPrefab> m_Priority = new();
 
@@ -317,9 +279,8 @@ namespace CustomZones.Systems
                 m_Folder = Path.Combine(EnvPath.kUserDataPath, "ModsData", Mod.Id, "GeneratedIcons");
                 Directory.CreateDirectory(m_Folder);
 
-                // Cache invalidation: icons produced by an older rendering
-                // pipeline (different lighting, no trimming, no quantization)
-                // are dropped so they get regenerated with the current one.
+                // Pictures made by an older version of the drawing are dropped
+                // and drawn again.
                 InvalidateStaleCache();
 
                 // Index what previous sessions already generated (the cache).
@@ -332,7 +293,7 @@ namespace CustomZones.Systems
                     }
                 }
 
-                // Serve the folder to the cohtml UI (same mechanism as AIL).
+                // Serve the folder to the UI (the same mechanism Asset Icon Library uses).
                 UIManager.defaultUISystem.AddHostLocation(HostName, m_Folder);
                 m_HostRegistered = true;
 
@@ -345,9 +306,8 @@ namespace CustomZones.Systems
         }
 
         /// <summary>
-        /// Wipes the cache when it was produced by a different rendering
-        /// pipeline, so visual/size improvements roll out automatically instead
-        /// of leaving old icons frozen on disk forever.
+        /// Empties the cache when it was made with another
+        /// <see cref="PipelineVersion"/>, so improvements reach existing pictures.
         /// </summary>
         private void InvalidateStaleCache()
         {
@@ -447,13 +407,10 @@ namespace CustomZones.Systems
         }
 
         /// <summary>
-        /// Generates EVERY missing icon in one blocking pass while the loading
-        /// screen is still up. That is ~45-60 s of solid work the very first
-        /// time, which would be an unacceptable freeze mid-game but is perfectly
-        /// normal during loading — and it only ever happens once, because the
-        /// PNGs are cached on disk from then on.
-        /// The per-frame trickle in OnUpdate stays as a safety net for anything
-        /// that shows up later (assets enabled mid-session, failed retries).
+        /// Draws every missing picture in one blocking pass while the loading
+        /// screen is still up. The first time this can take about a minute;
+        /// afterwards the pictures are on disk and there is little or nothing
+        /// left to draw. OnUpdate draws whatever shows up later, a few per frame.
         /// </summary>
         protected override void OnGameLoadingComplete(Purpose purpose, GameMode mode)
         {
@@ -464,11 +421,8 @@ namespace CustomZones.Systems
                 return;
             }
 
-            // DISABLED while the virtual-texturing warm-up is in use: this pass
-            // is synchronous, and streaming only advances BETWEEN frames, so
-            // everything it produced would be untextured — and worse, cached as
-            // final, permanently denying those buildings a proper icon. The
-            // per-frame generator in OnUpdate handles everything instead.
+            // A multi-frame warm-up cannot happen inside one blocking pass: leave
+            // everything to OnUpdate then.
             if (WarmupFrames > 1)
             {
                 Mod.Log.Info($"IconGenerator: preload skipped (VT warm-up needs real frames); {Pending} building(s) will be rendered in the background.");
@@ -553,14 +507,9 @@ namespace CustomZones.Systems
         }
 
         /// <summary>
-        /// One building at a time, rendered across SEVERAL consecutive frames.
-        ///
-        /// WHY MULTI-FRAME: CS2 building textures are streamed by HDRP's virtual
-        /// texturing, and streaming only advances between frames — the first
-        /// render of a subject samples tiles that are not resident yet, which is
-        /// why single-shot renders came out untextured. Holding the subject in
-        /// front of the camera for a few frames gives the VT feedback loop time
-        /// to request and upload its tiles before we capture.
+        /// Draws the waiting buildings one at a time: each one is placed in front
+        /// of the camera, rendered for <see cref="WarmupFrames"/> frames, then
+        /// captured and saved.
         /// </summary>
         protected override void OnUpdate()
         {
@@ -570,7 +519,7 @@ namespace CustomZones.Systems
 
                 if (--m_SubjectFramesLeft > 0)
                 {
-                    return; // still warming up the textures
+                    return; // not captured yet
                 }
 
                 CompleteSubject();
@@ -644,8 +593,8 @@ namespace CustomZones.Systems
             {
                 m_Cached.Add(name);
 
-                // Patch just this building's entry: rebuilding the whole index
-                // per icon is what used to tank the framerate.
+                // Only this building's entry is updated: rebuilding the whole
+                // index for every picture would be far too slow.
                 IndexSystem?.ApplyGeneratedIcon(name, GetGeneratedIcon(name));
                 m_SinceNotify++;
             }
@@ -654,8 +603,8 @@ namespace CustomZones.Systems
                 m_Failed.Add(name);
             }
 
-            // Something the user is actually looking at just finished: refresh
-            // now instead of making them wait for the next background batch.
+            // A building on screen was just drawn: refresh the UI now instead of
+            // waiting for the next batch.
             if (saved && wasPriority)
             {
                 m_SinceNotify = 0;
@@ -756,12 +705,9 @@ namespace CustomZones.Systems
                     var rotation = new Quaternion(
                         info.m_Rotation.value.x, info.m_Rotation.value.y, info.m_Rotation.value.z, info.m_Rotation.value.w);
 
-                    // CRITICAL (mirrors RenderPrefab.ObtainMesh): a prefab is made
-                    // of SEVERAL meshes and the material list is indexed
-                    // CONTINUOUSLY across every sub-mesh of every mesh. Rendering
-                    // only meshes[0] dropped whole walls, and handing it the full
-                    // material array painted surfaces with the wrong material
-                    // (that is why the icons came out grey).
+                    // As in RenderPrefab.ObtainMesh: a prefab may have several
+                    // meshes, and its material list runs on across every sub-mesh
+                    // of every mesh, so the material index carries over.
                     var materialCursor = 0;
 
                     foreach (var mesh in meshes)
@@ -825,8 +771,8 @@ namespace CustomZones.Systems
         }
 
         /// <summary>
-        /// Build + render + capture in a single call. Only used by the blocking
-        /// preload path (which cannot benefit from multi-frame VT streaming).
+        /// Build, render and capture in a single call, for the blocking pass
+        /// during loading.
         /// </summary>
         private bool GenerateImmediately(BuildingPrefab prefab, string name)
         {
@@ -863,22 +809,17 @@ namespace CustomZones.Systems
         }
 
         /// <summary>
-        /// Returns materials that render correctly OFF-SCREEN.
-        ///
-        /// WHY THIS IS NEEDED (decompiled SurfaceAsset, 2026-08-03):
-        /// CS2 surfaces are virtual-textured. When VT is on, `SyncToUnityMaterial`
-        /// deliberately does NOT bind those textures to the material — it enables
-        /// the shader keyword ENABLE_VT and lets the streaming system feed them.
-        /// Worse, `SurfaceAsset.Load` only builds a material on the FIRST load
-        /// (`IncrementRefCount`), so once the game has loaded a surface to draw
-        /// the city, asking for a non-VT variant silently returns the existing VT
-        /// one — which is why passing useVT:false changed nothing.
-        /// Our off-screen camera never runs the VT resolve pass, so those
-        /// materials sample nothing and render as flat grey.
-        ///
-        /// So we clone each material, turn ENABLE_VT off, and bind the real
-        /// textures ourselves — exactly what the engine does when VT is disabled.
+        /// Materials that can be drawn by the off-screen camera.
         /// </summary>
+        /// <remarks>
+        /// With virtual texturing on, SurfaceAsset.SyncToUnityMaterial does not
+        /// bind the surface's textures: it enables the ENABLE_VT keyword and lets
+        /// the streaming system feed them, which never happens for an off-screen
+        /// camera. SurfaceAsset.Load also builds its material only once, so a
+        /// surface already loaded for the city cannot be asked for without VT.
+        /// Each material is therefore cloned, with ENABLE_VT turned off and the
+        /// textures bound directly when they can be loaded (see GetIconMaterial).
+        /// </remarks>
         private Material[] ObtainIconMaterials(RenderPrefab renderPrefab)
         {
             var source = renderPrefab.ObtainMaterials();
@@ -899,7 +840,7 @@ namespace CustomZones.Systems
             return result;
         }
 
-        // Reflection handles onto TextureAsset's private state. Resolved once.
+        // TextureAsset's private instance and reference count, read through reflection.
         private static readonly System.Reflection.FieldInfo s_TextureInstance =
             typeof(TextureAsset).GetField("m_Instance", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
 
@@ -910,20 +851,16 @@ namespace CustomZones.Systems
         private readonly Dictionary<TextureAsset, Texture> m_Textures = new();
 
         /// <summary>
-        /// Gets a TextureAsset's Unity texture WITHOUT disturbing the asset
-        /// database's reference counting.
-        ///
-        /// WHY: TextureAsset.Load() does `if (IncrementRefCount(LoadState.Object))
-        /// { load } else if (m_Instance == null) { log.Error("reference count is
-        /// out of sync"); force-load }`. VT textures live in the streaming atlas
-        /// and can sit at refcount &gt; 0 with NO Unity texture instance, so calling
-        /// Load() on them lands straight in that error branch — that is the flood
-        /// of "object reference count is out of sync" errors.
-        ///
-        /// So: use the existing instance when there is one, Load() only when the
-        /// count is genuinely zero (the safe branch), and otherwise skip the
-        /// texture rather than corrupt the count.
+        /// Gets the Unity texture of a TextureAsset: its existing instance when it
+        /// has one, otherwise a fresh load. Placeholder assets of virtual textures
+        /// (no data) are skipped.
         /// </summary>
+        /// <remarks>
+        /// TextureAsset.Load logs "reference count is out of sync" when the asset
+        /// has a reference count but no instance (common for virtual textures), and
+        /// then loads it anyway with a count of 1. Setting the count to 0 first
+        /// reaches the same state without the error.
+        /// </remarks>
         private bool TryResolveTexture(TextureAsset asset, out Texture texture)
         {
             if (m_Textures.TryGetValue(asset, out texture))
@@ -937,12 +874,9 @@ namespace CustomZones.Systems
             {
                 texture = s_TextureInstance?.GetValue(asset) as Texture;
 
-                // A dummy asset has NO database (`isDummy => database == null`),
-                // so GetReadStream() — and therefore Load() — throws instantly.
-                // These are exactly the virtual-texturing textures: their pixels
-                // only exist pre-processed inside the VT store and cannot be
-                // loaded standalone. Trying anyway is what produced thousands of
-                // NullReferenceExceptions.
+                // A placeholder asset (isDummy: no database) has no data to load;
+                // Load would throw. These are the virtual textures, whose pixels
+                // exist only inside the VT store.
                 if (texture == null && asset.isDummy)
                 {
                     m_Textures[asset] = null;
@@ -951,13 +885,8 @@ namespace CustomZones.Systems
 
                 if (texture == null)
                 {
-                    // A VT texture can sit at refCount > 0 with no Unity instance.
-                    // Load() detects that, logs "reference count is out of sync"
-                    // (the error flood) and RECOVERS by forcing the count to 1 and
-                    // loading anyway — so loading is the right thing to do; only
-                    // the noise is wrong. Resetting the count to 0 first makes
-                    // Load() take its normal branch and reach the exact same end
-                    // state (count 1 + instance) without the error.
+                    // See the remarks: a count without an instance is reset first, so
+                    // Load takes its normal path.
                     if (s_TextureRefCount != null && (int)s_TextureRefCount.GetValue(asset) != 0)
                     {
                         s_TextureRefCount.SetValue(asset, 0);
@@ -980,12 +909,10 @@ namespace CustomZones.Systems
         private bool m_ClayMaterialTried;
 
         /// <summary>
-        /// A neutral matte material used when a surface's real textures are
-        /// unavailable (which is the norm: CS2 building textures are virtual-
-        /// textured dummy assets that cannot be loaded standalone). Produces a
-        /// clean architectural "white model" render instead of a murky grey one.
-        /// Null if no usable shader could be found, in which case callers keep
-        /// the game's own material.
+        /// The neutral matte material used for surfaces whose textures cannot be
+        /// loaded (most of them: see the file header), for a clean "white model"
+        /// picture. Null when no usable shader is found; the game's own material
+        /// is then kept.
         /// </summary>
         private Material ClayMaterial
         {
@@ -1049,8 +976,8 @@ namespace CustomZones.Systems
                 return cached;
             }
 
-            // Surfaces we already know we cannot clone: never retried, otherwise
-            // the same failure repeats for every single building using them.
+            // Surfaces that could not be cloned are not tried again for every
+            // building that uses them.
             if (m_UnconvertibleSurfaces.Contains(surface))
             {
                 return original;
@@ -1069,9 +996,8 @@ namespace CustomZones.Systems
                 return original;
             }
 
-            // Bind what the VT path leaves unassigned (albedo, normal, mask...).
-            // Guarded per texture: `textures` can be null and one bad entry must
-            // not cost us the whole (otherwise perfectly good) material.
+            // Bind the textures the VT path leaves unassigned (albedo, normal,
+            // mask...), one by one so a bad entry does not lose the material.
             var textures = surface.textures;
             var bound = 0;
 
@@ -1086,8 +1012,8 @@ namespace CustomZones.Systems
                             continue;
                         }
 
-                        // Only surfaces that genuinely own their textures can be
-                        // bound; virtual-textured ones are handled by ClayMaterial.
+                        // Only textures that are ordinary assets can be bound;
+                        // surfaces without any use ClayMaterial (below).
                         if (texture.Value != null && TryResolveTexture(texture.Value, out var loaded))
                         {
                             material.SetTexture(texture.Key, loaded);
@@ -1103,21 +1029,13 @@ namespace CustomZones.Systems
 
             if (bound == 0)
             {
-                // Nothing could be bound: every texture of this surface lives
-                // ONLY inside the virtual-texturing store (they are dummy assets
-                // with no database, so they can never be loaded standalone).
-                // Keeping the game's VT material renders a murky dark grey, and
-                // turning ENABLE_VT off renders pure black — so instead we fall
-                // back to a clean neutral "model" material. The result is a
-                // deliberate white-model render, the same style AssetIconLibrary
-                // itself ships (its pack has ~7.9k "White" icons).
+                // Nothing could be bound: every texture of this surface exists only
+                // in the virtual-texturing store. The game's material would draw
+                // dark grey off-screen, and without ENABLE_VT black, so the neutral
+                // material is used: a "white model" picture, the style Asset Icon
+                // Library also uses for many buildings.
                 UnityEngine.Object.DestroyImmediate(material);
 
-                // PROVEN DEAD END (see the file header): these textures live
-                // only inside the virtual-texturing store and there is no way to
-                // sample it from an off-screen camera. Go straight to the neutral
-                // model material — measured chroma of the VT material was ~0.1/255
-                // on every single building, i.e. pure greyscale.
                 var clay = ClayMaterial;
                 if (clay != null)
                 {
@@ -1129,13 +1047,11 @@ namespace CustomZones.Systems
                 return original;
             }
 
-            // We have real textures, so the shader must read them instead of the
-            // (unresolved) virtual-texturing path.
+            // The textures are bound: the shader must read them instead of the
+            // virtual-texturing path.
             material.DisableKeyword(VirtualTexturingKeyword);
 
-            // Track how rare this is: these are the surfaces whose textures are
-            // stored as normal assets rather than only inside the VT store, and
-            // they are the ONLY ones that can render in real colour.
+            // Counted for the log: only these surfaces are drawn in colour.
             m_TexturedSurfaces++;
 
             if (m_TexturedSurfaces <= MaxLoggedFailures)
@@ -1143,25 +1059,23 @@ namespace CustomZones.Systems
                 Mod.Log.Info($"IconGenerator: surface '{surface.name}' has {bound} REAL texture(s) — it will render in colour.");
             }
 
-            // Only ever cache OUR clones: the cache is destroyed on cleanup, and
-            // destroying a material owned by the game would break the city's
-            // rendering.
+            // Only the mod's own clones are cached: the cache is destroyed on
+            // cleanup, and the game's materials must never be destroyed.
             m_IconMaterials[surface] = material;
             return material;
         }
 
         /// <summary>
-        /// Places the camera on a 3/4 isometric angle framing the whole subject,
-        /// which is the look AssetIconLibrary/FindIt icons use.
+        /// Places the camera at a 3/4 isometric angle framing the whole building,
+        /// the usual angle of building icons.
         /// </summary>
         private void FrameCamera(Vector3 min, Vector3 max)
         {
             var center = (min + max) * 0.5f;
             var extent = Mathf.Max(0.5f, Vector3.Distance(min, max) * 0.5f);
 
-            // Look at the building's FRONT: CS2 lots face +Z (the street side),
-            // so the camera has to sit on the +X/+Z side. The previous
-            // (-0.7, .., -0.7) direction was showing the back of every house.
+            // Looking at the building's front: lots face +Z (the street side), so
+            // the camera sits on the +X / +Z side.
             var direction = new Vector3(0.7f, 0.55f, 0.7f).normalized;
 
             m_Camera.orthographicSize = extent * 0.95f;
@@ -1173,17 +1087,14 @@ namespace CustomZones.Systems
 
         /// <summary>
         /// Reads the render back, rejects useless results, then shrinks the image
-        /// as much as possible before saving. Three size levers, in order of gain:
-        ///   1. TRIM — crop to the building's opaque bounds. Roughly halves the
-        ///      pixel count and makes the building fill the card better.
-        ///   2. FLATTEN — force every transparent pixel to a single value
-        ///      (0,0,0,0). A uniform region is nearly free in PNG's DEFLATE,
-        ///      whereas the noisy near-transparent fringe is not.
-        ///   3. QUANTIZE — drop the low 3 bits of each colour channel. At icon
-        ///      size this is invisible but massively increases the number of
-        ///      repeated bytes, which is exactly what DEFLATE compresses.
-        /// PNG (not JPG) because we need the alpha channel; Unity cannot encode
-        /// WebP/AVIF, so this is the smallest lossless-alpha option available.
+        /// as much as possible before saving:
+        ///   1. Trim: crop to the building's opaque bounds (about half the pixels,
+        ///      and the building fills the card better).
+        ///   2. Flatten: every transparent pixel becomes (0,0,0,0); a uniform area
+        ///      costs almost nothing in PNG's DEFLATE.
+        ///   3. Quantise: drop the low 2 bits of each colour channel, invisible at
+        ///      icon size but many more repeated bytes for DEFLATE.
+        /// PNG keeps the alpha channel (Unity cannot encode WebP or AVIF).
         /// </summary>
         private bool WritePng(string name)
         {
@@ -1193,21 +1104,19 @@ namespace CustomZones.Systems
             {
                 RenderTexture.active = m_Target;
 
-                // One reused texture + a raw (copy-free) view of its pixels:
-                // allocating a Texture2D and a 64 KB Color32[] per icon was pure
-                // GC/driver churn across thousands of buildings.
+                // One reused texture and a raw view of its pixels, instead of a new
+                // Texture2D and pixel array for each of thousands of buildings.
                 m_ReadTexture.ReadPixels(new Rect(0, 0, IconSize, IconSize), 0, 0);
                 m_ReadTexture.Apply(false);
 
                 var pixels = m_ReadTexture.GetRawTextureData<Color32>();
 
                 // --- Background key ------------------------------------------
-                // HDRP does not reliably hand us a transparent alpha channel, so
-                // instead of trusting alpha we work out what the background looks
-                // like and key it out ourselves. The four corners are always
-                // background (the subject is centred and framed to fit), so if
-                // they agree we use that colour as the key. Self-calibrating:
-                // it does not matter what colour HDRP actually cleared to.
+                // HDRP does not reliably give a transparent alpha channel, so the
+                // background is keyed out by colour. The four corners are always
+                // background (the building is centred and framed to fit), so when
+                // they agree their colour is the key, whatever exact colour HDRP
+                // cleared to.
                 var c0 = pixels[0];
                 var c1 = pixels[IconSize - 1];
                 var c2 = pixels[(IconSize - 1) * IconSize];
@@ -1216,12 +1125,9 @@ namespace CustomZones.Systems
                 var hasKey = Similar(c0, c1) && Similar(c0, c2) && Similar(c0, c3);
                 var key = c0;
 
-                // Safety net: whatever happens with the corner sampling, a pixel
-                // that is clearly magenta is backdrop. Without this, a subject
-                // filling the whole frame would leave the corners non-background,
-                // disable the key and ship an icon with a glaring magenta
-                // background. Written as a relative test so it survives
-                // tonemapping/exposure shifting the exact shade.
+                // Whatever the corners say, a clearly magenta pixel is backdrop (a
+                // building filling the whole frame leaves no background corner).
+                // A relative test, so it holds when exposure shifts the shade.
                 static bool IsChromaKey(Color32 p)
                     => p.r - p.g > 60 && p.b - p.g > 60;
 
@@ -1266,11 +1172,10 @@ namespace CustomZones.Systems
                     return Fail(name, $"empty render (subject={subject}px, keyed={hasKey})");
                 }
 
-                // A flat single-colour slab that fills the WHOLE frame is a
-                // failed render. A flat-coloured but properly shaped object
-                // (beach/terrain spawners, plain warehouses) is legitimate, so
-                // uniform colour alone must not disqualify it — that over-strict
-                // rule is what rejected the BeachSpawn family.
+                // A flat single-colour slab that fills the whole frame is a failed
+                // render. A flat-coloured object with a real shape (beach or
+                // terrain spawners, plain warehouses) is fine, so a uniform colour
+                // alone does not reject it.
                 if (subject > total * 98 / 100 &&
                     (rMax - rMin) + (gMax - gMin) + (bMax - bMin) < UniformTolerance)
                 {
@@ -1324,15 +1229,11 @@ namespace CustomZones.Systems
                             }
                         }
 
-                        // DESPILL, applied to EVERY kept pixel (not just the rim).
-                        // The magenta backdrop bleeds into the subject through
-                        // anti-aliasing and translucent surfaces — windows, fences,
-                        // railings — leaving violet blotches INSIDE the building,
-                        // which is what stained some icons. The test is deliberately
-                        // narrow: only when R and B BOTH exceed G, the signature of
-                        // magenta. A genuinely orange pixel (r > g > b) or a cyan one
-                        // is left completely untouched, so real textures keep their
-                        // colour.
+                        // Despill, on every kept pixel: the magenta backdrop bleeds
+                        // into the building through anti-aliasing and translucent
+                        // surfaces (windows, fences, railings). Only pixels where R
+                        // and B both exceed G, the mark of magenta, are corrected;
+                        // orange (r > g > b) or cyan pixels keep their colour.
                         if (r > g && b > g)
                         {
                             var spill = Mathf.Min(r - g, b - g);
@@ -1340,9 +1241,7 @@ namespace CustomZones.Systems
                             b = (byte)(b - spill);
                         }
 
-                        // Gentle 6-bit quantization: still helps DEFLATE, but
-                        // preserves far more of the texture detail than the
-                        // previous 5-bit pass (quality now beats bytes).
+                        // 6-bit quantisation: helps DEFLATE while keeping the detail.
                         cropped[targetRow + x] = new Color32(
                             (byte)(r & 0xFC),
                             (byte)(g & 0xFC),
@@ -1405,32 +1304,23 @@ namespace CustomZones.Systems
             m_Camera.targetTexture = m_Target;
             m_Camera.enabled = false; // rendered manually via Render()
 
-            // HDRP owns clearing and exposure. Without this the camera inherits
-            // the scene's sky/fog (an opaque murky background, which also wrecks
-            // PNG compression) and the scene's exposure volumes (which is why the
-            // first batch came out very dark). Guarded: if any of it throws we
-            // still render, just with the previous look.
+            // HDRP settings of the camera: its own clear colour and exposure, not
+            // the scene's sky, fog and exposure volumes. If any of it fails, the
+            // camera still renders with the defaults.
             try
             {
                 var hdCamera = cameraObject.AddComponent<HDAdditionalCameraData>();
                 hdCamera.clearColorMode = HDAdditionalCameraData.ClearColorMode.Color;
 
-                // MAGENTA, exactly like AssetIconCreator's Magenta.png backdrop.
-                // The background is keyed out by COLOUR, so it must be a colour
-                // no building surface can have. With a black backdrop every dark
-                // roof and shadowed wall matched the key and was punched out —
-                // that is what produced the see-through walls.
+                // The magenta backdrop (see ChromaKeyColor), keyed out by colour.
                 hdCamera.backgroundColorHDR = ChromaKeyColor;
 
-                // See ONLY our own volume, never the world's (whose exposure/fog
-                // belong to the actual scene and time of day).
+                // Only the mod's own volume, never the world's (its exposure and
+                // fog belong to the city and the time of day).
                 hdCamera.volumeLayerMask = 1 << RenderLayer;
 
-                // Virtual texturing must be ON for this camera, otherwise the
-                // building surfaces have no way of ever getting their textures
-                // (they exist only inside the VT store). Combined with the
-                // multi-frame warm-up in OnUpdate, this is what lets the tiles
-                // stream in before we capture.
+                // Virtual texturing enabled in the camera's frame settings, as in
+                // the game's own cameras.
                 hdCamera.customRenderingSettings = true;
                 hdCamera.renderingPathCustomFrameSettings.SetEnabled(FrameSettingsField.VirtualTexturing, true);
 
@@ -1445,12 +1335,10 @@ namespace CustomZones.Systems
                 Mod.Log.Warn($"IconGenerator: HDRP camera setup skipped ({ex.Message}).");
             }
 
-            // THREE-POINT LIGHTING. A single directional light left every face
-            // pointing away from it at PURE BLACK (in the real game the sky's
-            // ambient/GI fills those, but an isolated off-screen render has no
-            // sky at all) while the face catching it blew out to white. The key
-            // comes from behind the camera so the FRONT of the building — the
-            // side we actually photograph — is the well-lit one.
+            // Three-point lighting: an off-screen render has no sky to light the
+            // faces turned away from the sun, so a key, a fill and a top light are
+            // used. The key comes from behind the camera, so the front of the
+            // building is the well-lit side.
             m_Light = CreateLight("CZ_IconKey", new Vector3(35f, 215f, 0f), KeyLightLux);
             CreateLight("CZ_IconFill", new Vector3(15f, 60f, 0f), FillLightLux);
             CreateLight("CZ_IconRim", new Vector3(70f, 130f, 0f), RimLightLux);
@@ -1487,12 +1375,9 @@ namespace CustomZones.Systems
         }
 
         /// <summary>
-        /// Gives the off-screen camera a deterministic exposure.
-        /// CRITICAL: HDRP's Exposure defaults to Fixed at EV100 = 0, i.e. metered
-        /// for an almost pitch-black scene. Rendering a 25 000 lux lit building
-        /// under that produces a pure white silhouette — which is exactly what
-        /// the first batches looked like. A fixed EV matched to the key light
-        /// gives a correctly exposed, textured render.
+        /// Gives the off-screen camera a fixed exposure matched to its lights.
+        /// HDRP's default (Fixed, EV100 = 0) suits an almost dark scene and would
+        /// turn a building lit at 25 000 lux into a white silhouette.
         /// </summary>
         private void CreateExposureVolume()
         {
@@ -1538,10 +1423,9 @@ namespace CustomZones.Systems
                 m_ReadTexture = null;
             }
 
-            // Our cloned (de-VT'd) materials are ours to destroy; the originals
-            // belong to the game and must never be touched.
-            // De-duplicated: the neutral material is shared by many surfaces, so
-            // a plain loop would try to destroy the same object over and over.
+            // Only the mod's own materials (clones and the neutral one) are
+            // destroyed, each once: the neutral material is shared by many
+            // surfaces. The game's materials are never touched.
             var destroyed = new HashSet<Material>();
 
             foreach (var material in m_IconMaterials.Values)
@@ -1557,8 +1441,7 @@ namespace CustomZones.Systems
             m_ClayMaterial = null;
             m_ClayMaterialTried = false;
 
-            // Textures belong to the asset database — we only ever borrowed
-            // references, so drop them without destroying anything.
+            // Textures belong to the asset database: only the references are dropped.
             m_Textures.Clear();
         }
 

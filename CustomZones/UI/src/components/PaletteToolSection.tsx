@@ -1,3 +1,7 @@
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
 // Adds a native "Custom Zones" row to the zoning tool's options panel (next to
 // "Tool Mode" / "Topography"), shown whenever the zoning tool is active, with a
 // single button that opens or closes the Custom Zones panel (on the custom zone

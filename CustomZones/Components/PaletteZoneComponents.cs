@@ -1,23 +1,24 @@
-// <copyright file="PaletteZoneComponents.cs">
-// CustomZones - Licensed under the MIT license.
-// Marker components carried by a palette's zone entity (ByLaw-style).
-// </copyright>
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
+// Components carried by the zone entity of a custom zone.
 
 namespace CustomZones.Components
 {
     using Unity.Entities;
 
     /// <summary>
-    /// Tag identifying a runtime palette zone, so our init/spawn systems can
-    /// recognize it (the spawn job only checks for its presence).
+    /// Marks the zone entity of a custom zone, so the mod's systems and jobs
+    /// can recognise it.
     /// </summary>
     public struct PaletteZoneMarker : IComponentData
     {
     }
 
     /// <summary>
-    /// One allowed (whitelisted) building prefab entity for a palette zone.
-    /// Populated on the zone entity so a Burst spawn job can filter by it.
+    /// One building prefab that may be born on a custom zone. Kept on the zone
+    /// entity so the Burst spawn job can read the zone's choice.
     /// </summary>
     public struct PaletteAllowedBuilding : IBufferElementData
     {

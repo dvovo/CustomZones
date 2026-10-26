@@ -1,6 +1,6 @@
-// <copyright file="CustomZoneCheckSystem.cs">
-// Custom Zones - Licensed under the MIT license.
-// </copyright>
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
 
 namespace CustomZones.Systems
 {
@@ -315,7 +315,7 @@ namespace CustomZones.Systems
                 }
 
                 // Every level of every building in the catalog: a building chosen at
-                // level 1 may level up (keep design) or become another catalog
+                // level 1 may level up (same design) or become another catalog
                 // building at the next level.
                 foreach (var selection in palette.Families)
                 {

@@ -1,3 +1,7 @@
+// Copyright (c) 2026 dvovo
+// Licensed under the MIT License. See LICENSE in the repository root.
+// https://mods.paradoxplaza.com/authors/dvovo
+//
 // The game's own UI pieces that the modding API does not export directly.
 // Taken from the game's module registry, so they look and sound exactly like
 // the rest of the game.
