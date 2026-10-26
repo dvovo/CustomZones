@@ -1,25 +1,18 @@
 // <copyright file="PaletteZoneSpawnSystem.cs">
 // CustomZones - Licensed under the MIT license.
 //
-// The ByLaw-model spawn system (Phase 2). A trimmed reimplementation of the
-// vanilla ZoneSpawnSystem.EvaluateSpawnAreas that runs UpdateBefore the
-// vanilla ZoneSpawnSystem: for every vacant lot whose zone carries our
-// PaletteZoneMarker, it selects a building ONLY from that zone's
-// PaletteAllowedBuilding whitelist (evaluated against each building's own
-// area-type demand, exactly like the vanilla spawner), then hands the chosen
-// spawn location to the vanilla ZoneSpawnSystem.SpawnBuildingJob.
+// The zone spawner of the city. It replaces the game's ZoneSpawnSystem
+// (disabled in Mod.OnLoad) and runs at the same pace, so the city grows at the
+// game's own rate:
+//   - vanilla zones: the game's own EvaluateSpawnAreas job, unchanged;
+//   - custom zones: our EvaluateSpawnAreas, which picks from the zone's
+//     catalog (PaletteAllowedBuilding) with the game's demand and score rules,
+//     evaluating every building by its OWN zone (type, density, office,
+//     process estimates), so one custom zone may mix densities and types.
+// Both feed the same three candidate queues, and the game's SpawnBuildingJob
+// then spawns the single best candidate of each type, exactly like the game.
 //
-// Unlike ZoningByLaw (which scans a random building chunk and filters), we
-// iterate the whitelist entities DIRECTLY, so a palette with only a handful of
-// buildings still spawns reliably instead of almost never hitting a match.
-//
-// Because a whitelisted building keeps its ORIGINAL zone (we do not clone or
-// re-zone it), the vanilla ZoneCheckSystem would see the cell's palette zone
-// type != the building's own zone type and immediately condemn it — so, like
-// ByLaw, the mod disables ZoneCheckSystem (see Mod.OnLoad).
-//
-// Technique reimplemented from FutureProg/ZoningByLawMod (no license file),
-// reusing the game's own ZoneSpawnSystem.SpawnBuildingJob + demand systems.
+// Spawn-from-whitelist idea from FutureProg/ZoningByLawMod (no license file).
 // </copyright>
 
 namespace CustomZones.Systems
@@ -49,6 +42,7 @@ namespace CustomZones.Systems
         private EntityQuery m_VacantLotsQuery;
         private EntityQuery m_ProcessQuery;
         private EntityQuery m_BuildingConfigQuery;
+        private EntityQuery m_BuildingQuery;
         private EntityArchetype m_DefinitionArchetype;
 
         private global::Game.Prefabs.ZoneSystem m_ZoneSystem;
@@ -162,6 +156,11 @@ namespace CustomZones.Systems
                 ComponentType.ReadWrite<Deleted>());
 
             m_ProcessQuery = GetEntityQuery(ComponentType.ReadOnly<IndustrialProcessData>());
+            m_BuildingQuery = GetEntityQuery(
+                ComponentType.ReadOnly<BuildingData>(),
+                ComponentType.ReadOnly<SpawnableBuildingData>(),
+                ComponentType.ReadOnly<BuildingSpawnGroupData>(),
+                ComponentType.ReadOnly<PrefabData>());
             m_BuildingConfigQuery = GetEntityQuery(ComponentType.ReadOnly<BuildingConfigurationData>());
 
             m_ZoneSystem = World.GetOrCreateSystemManaged<global::Game.Prefabs.ZoneSystem>();
@@ -229,7 +228,42 @@ namespace CustomZones.Systems
             }
         }
 
+        // Cost on the main thread (the evaluation itself runs in Burst jobs, like the
+        // game's): logged now and then so a slow city can be diagnosed from the log.
+        private readonly System.Diagnostics.Stopwatch m_Timer = new();
+        private int m_TimedPasses;
+        private double m_TimedMs;
+        private double m_MaxMs;
+
         protected override void OnUpdate()
+        {
+            try
+            {
+                m_Timer.Restart();
+                UpdateSpawn();
+                m_Timer.Stop();
+                var ms = m_Timer.Elapsed.TotalMilliseconds;
+                m_TimedMs += ms;
+                m_MaxMs = System.Math.Max(m_MaxMs, ms);
+                if (++m_TimedPasses >= 4096)
+                {
+                    Mod.Log.Info($"Spawn: {m_TimedPasses} passes, main thread {m_TimedMs / m_TimedPasses:0.###} ms on average, {m_MaxMs:0.##} ms at most.");
+                    m_TimedPasses = 0;
+                    m_TimedMs = 0;
+                    m_MaxMs = 0;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                // A game update changed something this system relies on: hand growth
+                // back to the game's own spawner rather than leave the city frozen.
+                Mod.Log.Error(ex, "Spawn: failed; the game's own zone spawner takes over (custom zones stop growing until the mod is updated).");
+                m_ZoneSpawnSystem.Enabled = true;
+                Enabled = false;
+            }
+        }
+
+        private void UpdateSpawn()
         {
             // The game's overall gates: no type grows while its demand bar is empty.
             var fastSpawn = m_ZoneSpawnSystem.debugFastSpawn;
@@ -272,6 +306,7 @@ namespace CustomZones.Systems
                 blockLookup = GetComponentLookup<Block>(true),
                 landValueLookup = GetComponentLookup<LandValue>(true),
                 resourceDataLookup = GetComponentLookup<ResourceData>(true),
+                lockedLookup = GetComponentLookup<Locked>(true),
                 resourcePrefabs = m_ResourceSystem.GetPrefabs(),
 
                 groundPollutionMap = m_PollutionSystem.GetMap(true, out var pollutionJob),
@@ -327,12 +362,57 @@ namespace CustomZones.Systems
                 m_ZoneSearchTree = m_SearchSystem.GetSearchTree(true, out var searchTreeJob),
             };
 
-            var evaluateHandle = evaluate.ScheduleParallel(
-                m_VacantLotsQuery,
-                JobHandle.CombineDependencies(
-                    JobHandle.CombineDependencies(Dependency, pollutionJob, processJob),
-                    JobHandle.CombineDependencies(airPollutionJob, noisePollutionJob),
-                    JobHandle.CombineDependencies(commercialDemandJob, industrialDemandJob, storageDemandJob)));
+            // The game's own evaluation for the vanilla zones, into the same queues.
+            var vanilla = new ZoneSpawnSystem.EvaluateSpawnAreas
+            {
+                m_BuildingChunks = m_BuildingQuery.ToArchetypeChunkListAsync(World.UpdateAllocator.ToAllocator, out var buildingChunksJob),
+                m_ZonePrefabs = m_ZoneSystem.GetPrefabs(),
+                m_Preferences = SystemAPI.GetSingleton<ZonePreferenceData>(),
+                m_SpawnResidential = spawnResidential ? 1 : 0,
+                m_SpawnCommercial = spawnCommercial ? 1 : 0,
+                m_SpawnIndustrial = spawnIndustrial ? 1 : 0,
+                m_SpawnStorage = spawnStorage ? 1 : 0,
+                m_MinDemand = fastSpawn ? 0 : 1,
+                m_ResidentialDemands = residentialDemand,
+                m_CommercialBuildingDemands = evaluate.commercialDemands,
+                m_IndustrialDemands = evaluate.industrialDemands,
+                m_StorageDemands = evaluate.storageDemands,
+                m_RandomSeed = RandomSeed.Next(),
+                m_EntityType = GetEntityTypeHandle(),
+                m_BlockType = GetComponentTypeHandle<Block>(true),
+                m_OwnerType = GetComponentTypeHandle<Owner>(true),
+                m_CurvePositionType = GetComponentTypeHandle<CurvePosition>(true),
+                m_VacantLotType = GetBufferTypeHandle<VacantLot>(true),
+                m_BuildingDataType = GetComponentTypeHandle<BuildingData>(true),
+                m_SpawnableBuildingType = GetComponentTypeHandle<SpawnableBuildingData>(true),
+                m_BuildingPropertyType = GetComponentTypeHandle<BuildingPropertyData>(true),
+                m_ObjectGeometryType = GetComponentTypeHandle<ObjectGeometryData>(true),
+                m_BuildingSpawnGroupType = GetSharedComponentTypeHandle<BuildingSpawnGroupData>(),
+                m_WarehouseType = GetComponentTypeHandle<WarehouseData>(true),
+                m_ZoneData = GetComponentLookup<ZoneData>(true),
+                m_ZonePropertiesDatas = GetComponentLookup<ZonePropertiesData>(true),
+                m_Availabilities = GetBufferLookup<ResourceAvailability>(true),
+                m_LandValues = GetComponentLookup<LandValue>(true),
+                m_BlockData = GetComponentLookup<Block>(true),
+                m_Processes = evaluate.industrialProcesses,
+                m_ProcessEstimates = GetBufferLookup<ProcessEstimate>(true),
+                m_ResourceDatas = GetComponentLookup<ResourceData>(true),
+                m_ResourcePrefabs = evaluate.resourcePrefabs,
+                m_GroundPollutionMap = evaluate.groundPollutionMap,
+                m_AirPollutionMap = evaluate.airPollutionMap,
+                m_NoisePollutionMap = evaluate.noisePollutionMap,
+                m_Residential = residentialQ.AsParallelWriter(),
+                m_Commercial = commercialQ.AsParallelWriter(),
+                m_Industrial = industrialQ.AsParallelWriter(),
+            };
+
+            var inputs = JobHandle.CombineDependencies(
+                JobHandle.CombineDependencies(Dependency, pollutionJob, processJob),
+                JobHandle.CombineDependencies(airPollutionJob, noisePollutionJob, buildingChunksJob),
+                JobHandle.CombineDependencies(commercialDemandJob, industrialDemandJob, storageDemandJob));
+
+            var vanillaHandle = vanilla.ScheduleParallel(m_VacantLotsQuery, inputs);
+            var evaluateHandle = evaluate.ScheduleParallel(m_VacantLotsQuery, vanillaHandle);
 
             var spawnHandle = spawnBuildingJob.Schedule(3, 1, JobHandle.CombineDependencies(evaluateHandle, searchTreeJob));
 
@@ -380,6 +460,7 @@ namespace CustomZones.Systems
             [ReadOnly] public ComponentLookup<Block> blockLookup;
             [ReadOnly] public ComponentLookup<LandValue> landValueLookup;
             [ReadOnly] public ComponentLookup<ResourceData> resourceDataLookup;
+            [ReadOnly] public ComponentLookup<Locked> lockedLookup;
             [ReadOnly] public ResourcePrefabs resourcePrefabs;
 
             [ReadOnly] public NativeArray<GroundPollution> groundPollutionMap;
@@ -442,8 +523,6 @@ namespace CustomZones.Systems
                         if (!paletteMarkerLookup.HasComponent(zonePrefab) ||
                             !allowedBuildingLookup.TryGetBuffer(zonePrefab, out var allowed) ||
                             allowed.Length == 0 ||
-                            !zonePropertiesDataLookup.TryGetComponent(zonePrefab, out var zoneProperties) ||
-                            !processEstimatesLookup.TryGetBuffer(zonePrefab, out var estimates) ||
                             !zoneDataLookup.TryGetComponent(zonePrefab, out var zoneData))
                         {
                             continue;
@@ -462,34 +541,34 @@ namespace CustomZones.Systems
                         var curvePosScalar = CalculateCurvePos(curvePos, vacantLot, block);
 
                         var zoneIndex = zoneData.m_ZoneType.m_Index;
-                        var typeCanGrow = zoneData.m_AreaType switch
+
+                        // A custom zone may mix types: each type of building in its
+                        // catalog competes in that type's queue, under that type's gate.
+                        var types = CatalogTypes(allowed);
+                        var stage = GrowthStage.NoLots;
+                        var anyOpen = false;
+                        if ((types & 1) != 0 && spawnResidential)
                         {
-                            AreaType.Residential => spawnResidential,
-                            AreaType.Commercial => spawnCommercial,
-                            AreaType.Industrial => spawnIndustrial || spawnStorage,
-                            _ => false,
-                        };
-                        if (!typeCanGrow)
-                        {
-                            lotResults.Enqueue((zoneIndex << 4) | (int)GrowthStage.TypeHasNoDemand);
-                            continue;
+                            anyOpen = true;
+                            stage = Max(stage, TryAddLot(allowed, AreaType.Residential, ref bestResidential, ref random, owner.m_Owner, curvePosScalar, entity,
+                                vacantLot.m_Area, vacantLot.m_Flags, (int)vacantLot.m_Height, zoneData, true, false));
                         }
 
-                        switch (zoneData.m_AreaType)
+                        if ((types & 2) != 0 && spawnCommercial)
                         {
-                            case AreaType.Residential when spawnResidential:
-                                TryAddLot(allowed, ref bestResidential, ref random, owner.m_Owner, curvePosScalar, entity,
-                                    vacantLot.m_Area, vacantLot.m_Flags, (int)vacantLot.m_Height, zoneData, zoneProperties, estimates, true, false);
-                                break;
-                            case AreaType.Commercial when spawnCommercial:
-                                TryAddLot(allowed, ref bestCommercial, ref random, owner.m_Owner, curvePosScalar, entity,
-                                    vacantLot.m_Area, vacantLot.m_Flags, (int)vacantLot.m_Height, zoneData, zoneProperties, estimates, true, false);
-                                break;
-                            case AreaType.Industrial when spawnIndustrial || spawnStorage:
-                                TryAddLot(allowed, ref bestIndustrial, ref random, owner.m_Owner, curvePosScalar, entity,
-                                    vacantLot.m_Area, vacantLot.m_Flags, (int)vacantLot.m_Height, zoneData, zoneProperties, estimates, spawnIndustrial, spawnStorage);
-                                break;
+                            anyOpen = true;
+                            stage = Max(stage, TryAddLot(allowed, AreaType.Commercial, ref bestCommercial, ref random, owner.m_Owner, curvePosScalar, entity,
+                                vacantLot.m_Area, vacantLot.m_Flags, (int)vacantLot.m_Height, zoneData, true, false));
                         }
+
+                        if ((types & 4) != 0 && (spawnIndustrial || spawnStorage))
+                        {
+                            anyOpen = true;
+                            stage = Max(stage, TryAddLot(allowed, AreaType.Industrial, ref bestIndustrial, ref random, owner.m_Owner, curvePosScalar, entity,
+                                vacantLot.m_Area, vacantLot.m_Flags, (int)vacantLot.m_Height, zoneData, spawnIndustrial, spawnStorage));
+                        }
+
+                        lotResults.Enqueue((zoneIndex << 4) | (int)(anyOpen ? Max(stage, GrowthStage.NothingFits) : GrowthStage.TypeHasNoDemand));
                     }
                 }
 
@@ -545,44 +624,62 @@ namespace CustomZones.Systems
                 return true;
             }
 
+            private bool IsLocked(Entity prefab) => lockedLookup.HasComponent(prefab) && lockedLookup.IsComponentEnabled(prefab);
+
+            private static GrowthStage Max(GrowthStage a, GrowthStage b) => (int)a >= (int)b ? a : b;
+
+            /// <summary>Area types present in a catalog (bit 1 residential, 2 commercial, 4 industrial/office).</summary>
+            private int CatalogTypes(DynamicBuffer<PaletteAllowedBuilding> allowed)
+            {
+                var types = 0;
+                for (var i = 0; i < allowed.Length; i++)
+                {
+                    if (spawnableLookup.TryGetComponent(allowed[i].m_Building, out var spawnable) &&
+                        zoneDataLookup.TryGetComponent(spawnable.m_ZonePrefab, out var buildingZone))
+                    {
+                        types |= buildingZone.m_AreaType switch
+                        {
+                            AreaType.Residential => 1,
+                            AreaType.Commercial => 2,
+                            AreaType.Industrial => 4,
+                            _ => 0,
+                        };
+                    }
+                }
+
+                return types;
+            }
+
             private float CalculateCurvePos(CurvePosition curvePosition, VacantLot lot, Block block)
             {
                 var s = math.saturate((lot.m_Area.x + lot.m_Area.y) * 0.5f / block.m_Size.x);
                 return math.lerp(curvePosition.m_CurvePosition.x, curvePosition.m_CurvePosition.y, s);
             }
 
-            private void TryAddLot(DynamicBuffer<PaletteAllowedBuilding> allowed, ref ZoneSpawnSystem.SpawnLocation bestLocation,
+            private GrowthStage TryAddLot(DynamicBuffer<PaletteAllowedBuilding> allowed, AreaType type, ref ZoneSpawnSystem.SpawnLocation bestLocation,
                 ref Random random, Entity road, float curvePos, Entity entity, int4 area, LotFlags flags, int height,
-                ZoneData zoneData, ZonePropertiesData zoneProperties, DynamicBuffer<ProcessEstimate> estimates, bool normal, bool storage)
+                ZoneData zoneData, bool normal, bool storage)
             {
                 if (!resourceAvailabilityLookup.HasBuffer(road))
                 {
-                    return;
+                    return GrowthStage.NothingFits;
                 }
 
-                if ((zoneData.m_ZoneFlags & ZoneFlags.SupportLeftCorner) == 0)
-                {
-                    flags &= ~LotFlags.CornerLeft;
-                }
-
-                if ((zoneData.m_ZoneFlags & ZoneFlags.SupportRightCorner) == 0)
-                {
-                    flags &= ~LotFlags.CornerRight;
-                }
-
+                // Corner flags are masked per building below, by the building's own
+                // zone (the game masks them by the lot's zone, which is the same
+                // zone for every building it considers).
                 var spawnLocation = default(ZoneSpawnSystem.SpawnLocation);
                 spawnLocation.m_Entity = entity;
                 spawnLocation.m_LotArea = area;
                 spawnLocation.m_ZoneType = zoneData.m_ZoneType;
-                spawnLocation.m_AreaType = zoneData.m_AreaType;
+                spawnLocation.m_AreaType = type;
                 spawnLocation.m_LotFlags = flags;
 
-                var office = zoneData.m_AreaType == AreaType.Industrial && estimates.Length == 0;
                 var availabilities = resourceAvailabilityLookup[road];
 
                 if (!blockLookup.HasComponent(spawnLocation.m_Entity))
                 {
-                    return;
+                    return GrowthStage.NothingFits;
                 }
 
                 var position = ZoneUtils.GetPosition(blockLookup[spawnLocation.m_Entity], spawnLocation.m_LotArea.xz, spawnLocation.m_LotArea.yw);
@@ -594,26 +691,25 @@ namespace CustomZones.Systems
                 var landValue = landValueLookup[road].m_LandValue;
                 var maxHeight = height - position.y;
 
-                var selected = SelectBuilding(allowed, ref spawnLocation, ref random, availabilities, zoneData, zoneProperties,
-                    curvePos, pollution, landValue, maxHeight, estimates, office, normal, storage, out var stage);
-                lotResults.Enqueue((zoneData.m_ZoneType.m_Index << 4) | (int)stage);
+                var selected = SelectBuilding(allowed, type, ref spawnLocation, ref random, availabilities, zoneData,
+                    curvePos, pollution, landValue, maxHeight, normal, storage, out var stage);
 
                 if (selected && spawnLocation.m_Priority > bestLocation.m_Priority)
                 {
                     bestLocation = spawnLocation;
                 }
+
+                return stage;
             }
 
-            private bool SelectBuilding(DynamicBuffer<PaletteAllowedBuilding> allowed, ref ZoneSpawnSystem.SpawnLocation location,
-                ref Random random, DynamicBuffer<ResourceAvailability> availabilities, ZoneData zoneData, ZonePropertiesData zoneProperties,
-                float curvePos, float3 pollution, float landValue, float maxHeight, DynamicBuffer<ProcessEstimate> estimates, bool office,
+            private bool SelectBuilding(DynamicBuffer<PaletteAllowedBuilding> allowed, AreaType type, ref ZoneSpawnSystem.SpawnLocation location,
+                ref Random random, DynamicBuffer<ResourceAvailability> availabilities, ZoneData zoneData,
+                float curvePos, float3 pollution, float landValue, float maxHeight,
                 bool normal, bool storage, out GrowthStage stage)
             {
                 stage = GrowthStage.NothingFits;
                 var maxLotSize = location.m_LotArea.yw - location.m_LotArea.xz;
                 var chosenBuildingData = default(BuildingData);
-                var lotAccess = new bool2((location.m_LotFlags & LotFlags.CornerLeft) > 0, (location.m_LotFlags & LotFlags.CornerRight) > 0);
-                var supportsNarrow = (zoneData.m_ZoneFlags & ZoneFlags.SupportNarrow) == 0;
 
                 for (var i = 0; i < allowed.Length; i++)
                 {
@@ -624,10 +720,45 @@ namespace CustomZones.Systems
                     if (!spawnableLookup.TryGetComponent(building, out var spawnableData) ||
                         !buildingLookup.TryGetComponent(building, out var subjBuildingData) ||
                         !propertyLookup.TryGetComponent(building, out var buildingPropertyData) ||
-                        !objGeomLookup.TryGetComponent(building, out var objGeom))
+                        !objGeomLookup.TryGetComponent(building, out var objGeom) ||
+                        !zoneDataLookup.TryGetComponent(spawnableData.m_ZonePrefab, out var buildingZone) ||
+                        buildingZone.m_AreaType != type)
                     {
                         continue;
                     }
+
+                    // Progression: a building of a zone the city has not unlocked yet
+                    // (milestones) does not grow, as it could not in the game.
+                    if (IsLocked(spawnableData.m_ZonePrefab) || IsLocked(building))
+                    {
+                        continue;
+                    }
+
+                    var lotFlags = location.m_LotFlags;
+                    if ((buildingZone.m_ZoneFlags & ZoneFlags.SupportLeftCorner) == 0)
+                    {
+                        lotFlags &= ~LotFlags.CornerLeft;
+                    }
+
+                    if ((buildingZone.m_ZoneFlags & ZoneFlags.SupportRightCorner) == 0)
+                    {
+                        lotFlags &= ~LotFlags.CornerRight;
+                    }
+
+                    var lotAccess = new bool2((lotFlags & LotFlags.CornerLeft) != 0, (lotFlags & LotFlags.CornerRight) != 0);
+                    var supportsNarrow = (buildingZone.m_ZoneFlags & ZoneFlags.SupportNarrow) == 0;
+
+                    // Everything about demand and score comes from the building's own
+                    // zone (its density bar, office or industry, process estimates),
+                    // so buildings of several densities or types can share a zone.
+                    zonePropertiesDataLookup.TryGetComponent(spawnableData.m_ZonePrefab, out var buildingZoneProperties);
+                    if (!processEstimatesLookup.TryGetBuffer(spawnableData.m_ZonePrefab, out var estimates))
+                    {
+                        continue;
+                    }
+
+                    // As the game decides it: an industrial zone without process estimates is office.
+                    var office = buildingZone.m_AreaType == AreaType.Industrial && estimates.Length == 0;
 
                     var lotSize = subjBuildingData.m_LotSize;
                     var buildingAccess = new bool2(
@@ -652,8 +783,8 @@ namespace CustomZones.Systems
                     {
                         continue;
                     }
-                    var evalAreaType = zoneDataLookup[spawnableData.m_ZonePrefab].m_AreaType;
-                    var zoneDensity = PropertyUtils.GetZoneDensity(zoneData, zoneProperties);
+                    var evalAreaType = buildingZone.m_AreaType;
+                    var zoneDensity = PropertyUtils.GetZoneDensity(buildingZone, buildingZoneProperties);
                     var num = EvaluateDemandAndAvailability(evalAreaType, buildingPropertyData, zoneDensity, isStorage);
 
                     if (num < minDemand)
@@ -672,8 +803,10 @@ namespace CustomZones.Systems
                     num2 += maxLotSize.x * int2.y * random.NextFloat(0.55f, 0.6f);
                     num2 /= maxLotSize.x * maxLotSize.y;
                     num2 *= num + 1;
+                    // Corner access as the game weighs it: a lot corner the building
+                    // does not face only lowers its score (0.01), it does not rule it out.
                     var accessMatchInfluence = 0.5f;
-                    var accessMisMatchInfluence = 0f;
+                    var accessMisMatchInfluence = 0.01f;
                     num2 *= math.csum(math.select(accessMisMatchInfluence, accessMatchInfluence, lotAccess == buildingAccess));
 
                     var num3 = landValue;

@@ -1,7 +1,7 @@
 // Adds a native "Custom Zones" row to the zoning tool's options panel (next to
-// "Tool Mode" / "Topography"), shown whenever the zoning tool is active:
-//   [+]    create a new custom zone
-//   [pen]  edit custom zones (opens the one selected in the toolbar, if any)
+// "Tool Mode" / "Topography"), shown whenever the zoning tool is active, with a
+// single button that opens or closes the Custom Zones panel (on the custom zone
+// being painted, if any). Creating and editing zones is done in the panel.
 // Pattern from Platter: wrap the vanilla MouseToolOptions and prepend our
 // section to its rendered children.
 import { ModuleRegistryExtend, getModule } from "cs2/modding";
@@ -12,7 +12,6 @@ import {
   activeZonePalette$,
   ICONS,
   panelVisible$,
-  requestNewZone,
   setPanelVisible,
   setSelectedZone,
   zoneToolActive$,
@@ -33,12 +32,7 @@ const CustomZonesSection = () => {
   const activePalette = useValue(activeZonePalette$);
   const { translate } = useLocalization();
 
-  const newZone = () => {
-    setPanelVisible(true);
-    requestNewZone();
-  };
-
-  const editZones = () => {
+  const togglePanel = () => {
     if (visible) {
       setPanelVisible(false);
       return;
@@ -56,15 +50,10 @@ const CustomZonesSection = () => {
     <FocusDisabled>
       <Section title={translate("CustomZones.Title", "Custom Zones")}>
         <ToolButton
-          src={ICONS.plus}
-          onSelect={newZone}
-          tooltip={translate("CustomZones.NewZoneTooltip", "Create a new custom zone")}
-        />
-        <ToolButton
-          src={ICONS.pen}
+          src={ICONS.tab}
           selected={visible}
-          onSelect={editZones}
-          tooltip={translate("CustomZones.EditZonesTooltip", "Edit custom zones")}
+          onSelect={togglePanel}
+          tooltip={translate("CustomZones.OpenPanelTooltip", "Open the Custom Zones panel")}
         />
       </Section>
     </FocusDisabled>

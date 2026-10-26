@@ -71,6 +71,11 @@ namespace CustomZones
             // SpawnBuildingJob. Runs just BEFORE the vanilla ZoneSpawnSystem.
             updateSystem.UpdateBefore<PaletteZoneSpawnSystem, ZoneSpawnSystem>(SystemUpdatePhase.GameSimulation);
 
+            // PaletteZoneSpawnSystem runs the game's own evaluation for the vanilla
+            // zones too and spawns from one shared set of candidates, so the city
+            // grows at the game's rate: the vanilla spawner must not run as well.
+            updateSystem.World.GetOrCreateSystemManaged<ZoneSpawnSystem>().Enabled = false;
+
             // Level-up rules of each custom zone (blocked / keep design / within the zone),
             // applied to the game's level-up just before BuildingConstructionSystem swaps the prefab.
             updateSystem.UpdateBefore<LevelUpControlSystem, BuildingConstructionSystem>(SystemUpdatePhase.GameSimulation);
@@ -88,6 +93,10 @@ namespace CustomZones
             // Removes an obsolete table from cities saved with a test build (zones are kept across
             // save / load by saving the zone prefabs: see PaletteZoneInitSystem).
             updateSystem.UpdateBefore<CustomZoneSaveSystem, CustomZoneCheckSystem>(SystemUpdatePhase.ModificationEnd);
+
+            // Growable buildings placed by hand (placement tool, Find It...) are
+            // tagged before the zone check sees them, so it never condemns them.
+            updateSystem.UpdateBefore<PlacedByHandSystem, CustomZoneCheckSystem>(SystemUpdatePhase.ModificationEnd);
             updateSystem.World
                 .GetOrCreateSystemManaged<global::Game.Buildings.ZoneCheckSystem>()
                 .Enabled = false;

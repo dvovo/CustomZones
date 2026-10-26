@@ -39,6 +39,17 @@ namespace CustomZones.Domain.UIBinding
         /// <summary>Thumbnail of each level of this building, "" where there is none (index 0 = level 1).</summary>
         public string[] LevelThumbnails = System.Array.Empty<string>();
 
+        /// <summary>Height in metres of each level of this building, 0 where there is none (index 0 = level 1).</summary>
+        public int[] LevelHeights = System.Array.Empty<int>();
+
+        /// <summary>
+        /// What each level is (index 0 = level 1): 2 = this design has a building
+        /// at that level; 1 = it has none, so it looks like the level below (the
+        /// game draws two levels with one model: L1 = L2, L3 = L4); 0 = nothing
+        /// below it either.
+        /// </summary>
+        public int[] LevelKinds = System.Array.Empty<int>();
+
         /// <summary>Goods the shown building sells / makes / stores (game resource name, "" for housing).</summary>
         public string Goods = string.Empty;
 
@@ -63,6 +74,28 @@ namespace CustomZones.Domain.UIBinding
             WriteStrings(writer, LevelThumbnails);
             writer.PropertyName("levelPictures");
             WriteStrings(writer, LevelPictures);
+            writer.PropertyName("levelKinds");
+            writer.ArrayBegin(LevelKinds?.Length ?? 0);
+            if (LevelKinds != null)
+            {
+                foreach (var kind in LevelKinds)
+                {
+                    writer.Write(kind);
+                }
+            }
+
+            writer.ArrayEnd();
+            writer.PropertyName("levelHeights");
+            writer.ArrayBegin(LevelHeights?.Length ?? 0);
+            if (LevelHeights != null)
+            {
+                foreach (var height in LevelHeights)
+                {
+                    writer.Write(height);
+                }
+            }
+
+            writer.ArrayEnd();
             writer.PropertyName("shownLevel");
             writer.Write(ShownLevel);
             writer.PropertyName("selectedLevels");
@@ -129,10 +162,16 @@ namespace CustomZones.Domain.UIBinding
         public int Density;
         public string Color;
         public string Icon;
+
+        /// <summary>Game zone icon chosen for the zone (empty = its base zone's).</summary>
+        public string IconSource;
         public int FamilyCount;
         public int BuildingCount;
         public bool LevelUp;
         public bool KeepDesign;
+
+        /// <summary>0 = born at level 1 like the game, 1 = born at any ticked level.</summary>
+        public int Growth;
 
         public void Write(IJsonWriter writer)
         {
@@ -149,6 +188,8 @@ namespace CustomZones.Domain.UIBinding
             writer.Write(Color);
             writer.PropertyName("icon");
             writer.Write(Icon);
+            writer.PropertyName("iconSource");
+            writer.Write(IconSource ?? string.Empty);
             writer.PropertyName("familyCount");
             writer.Write(FamilyCount);
             writer.PropertyName("buildingCount");
@@ -157,6 +198,8 @@ namespace CustomZones.Domain.UIBinding
             writer.Write(LevelUp);
             writer.PropertyName("keepDesign");
             writer.Write(KeepDesign);
+            writer.PropertyName("growth");
+            writer.Write(Growth);
             writer.TypeEnd();
         }
     }
@@ -185,6 +228,18 @@ namespace CustomZones.Domain.UIBinding
         /// <summary>Free lots of the zone in the last spawn pass.</summary>
         public int GrowthLots;
 
+        /// <summary>Painted cells of the zone in the city (shown before deleting it).</summary>
+        public int PaintedCells;
+
+        /// <summary>Buildings are ticked but none can be born (no level 1 while born like the game).</summary>
+        public bool NoBirth;
+
+        /// <summary>Lot sizes whose buildings stop levelling up below level 5: "WxD|level".</summary>
+        public string[] Stops = System.Array.Empty<string>();
+
+        /// <summary>Buildings that may be born but belong to a zone the city has not unlocked yet.</summary>
+        public int LockedBuildings;
+
         public void Write(IJsonWriter writer)
         {
             writer.TypeBegin(GetType().FullName);
@@ -211,6 +266,41 @@ namespace CustomZones.Domain.UIBinding
             writer.Write(GrowthStage);
             writer.PropertyName("growthLots");
             writer.Write(GrowthLots);
+            writer.PropertyName("paintedCells");
+            writer.Write(PaintedCells);
+            writer.PropertyName("noBirth");
+            writer.Write(NoBirth);
+            writer.PropertyName("stops");
+            FamilyUIEntry.WriteStrings(writer, Stops);
+            writer.PropertyName("lockedBuildings");
+            writer.Write(LockedBuildings);
+            writer.TypeEnd();
+        }
+    }
+
+    /// <summary>An icon kept in the icon library.</summary>
+    public class SavedIconUIEntry : IJsonWritable
+    {
+        public string Id;
+        public string Name;
+
+        /// <summary>The designer's value, applied to a zone as its icon.</summary>
+        public string Value;
+
+        /// <summary>coui:// address of its preview.</summary>
+        public string Preview;
+
+        public void Write(IJsonWriter writer)
+        {
+            writer.TypeBegin(GetType().FullName);
+            writer.PropertyName("id");
+            writer.Write(Id ?? string.Empty);
+            writer.PropertyName("name");
+            writer.Write(Name ?? string.Empty);
+            writer.PropertyName("value");
+            writer.Write(Value ?? string.Empty);
+            writer.PropertyName("preview");
+            writer.Write(Preview ?? string.Empty);
             writer.TypeEnd();
         }
     }

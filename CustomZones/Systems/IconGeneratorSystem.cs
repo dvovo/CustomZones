@@ -381,10 +381,16 @@ namespace CustomZones.Systems
             }
         }
 
-        /// <summary>
-        /// Returns the coui URL of a generated icon, or empty when this building
-        /// has none yet.
-        /// </summary>
+        /// <summary>File of a building's generated picture, when it has one.</summary>
+        public bool TryGetGeneratedPath(string prefabName, out string path)
+        {
+            path = m_Folder != null && m_Cached.Contains(prefabName ?? string.Empty)
+                ? Path.Combine(m_Folder, $"{FilePrefix}{prefabName}.png")
+                : null;
+            return path != null;
+        }
+
+        /// <summary>Coui URL of a generated icon, or empty when this building has none yet.</summary>
         public string GetGeneratedIcon(string prefabName)
             => m_Cached.Contains(prefabName)
                 ? $"coui://{HostName}/{FilePrefix}{prefabName}.png"

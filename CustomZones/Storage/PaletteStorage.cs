@@ -64,7 +64,8 @@ namespace CustomZones.Storage
                 Color = ZoneColors.NextFree(_palettes.Select(p => p.Color)),
             };
 
-            _palettes.Add(palette);
+            // Newest first: the zone just made is the one the player works on next.
+            _palettes.Insert(0, palette);
             Touch();
             Save();
             return palette;
@@ -93,6 +94,22 @@ namespace CustomZones.Storage
             }
 
             palette.Color = color.Trim().ToLowerInvariant();
+            ColorVersion++;
+            Touch();
+            Save();
+        }
+
+        /// <summary>Sets the game zone icon the zone's icon is drawn from (empty = its base zone's).</summary>
+        public void SetIcon(string id, string icon)
+        {
+            var palette = GetById(id);
+            icon = icon?.Trim() ?? string.Empty;
+            if (palette == null || string.Equals(palette.Icon ?? string.Empty, icon, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            palette.Icon = icon;
             ColorVersion++;
             Touch();
             Save();
@@ -127,13 +144,152 @@ namespace CustomZones.Storage
                 Families = new HashSet<string>(source.Families),
                 LevelUp = source.LevelUp,
                 KeepDesign = source.KeepDesign,
+                Growth = source.Growth,
+                Icon = source.Icon,
                 Color = ZoneColors.NextFree(_palettes.Select(p => p.Color)),
             };
 
-            _palettes.Add(copy);
+            _palettes.Insert(0, copy);
             Touch();
             Save();
             return copy;
+        }
+
+        /// <summary>Folder of exported zones, to share them: {UserData}/ModsData/CustomZones/Exports.</summary>
+        public string ExportFolder => Path.Combine(_folder, "Exports");
+
+        /// <summary>
+        /// Writes a zone (or every zone, with a null id) to a file in
+        /// <see cref="ExportFolder"/> and returns the file name, or null on failure.
+        /// </summary>
+        public string Export(string id)
+        {
+            var zones = id == null ? _palettes.ToList() : _palettes.Where(p => p.Id == id).ToList();
+            if (zones.Count == 0)
+            {
+                return null;
+            }
+
+            try
+            {
+                Directory.CreateDirectory(ExportFolder);
+                var stem = SafeFileName(id == null ? "All zones" : zones[0].Name);
+                var fileName = stem + ".json";
+                for (var n = 2; File.Exists(Path.Combine(ExportFolder, fileName)); n++)
+                {
+                    fileName = $"{stem} ({n}).json";
+                }
+
+                File.WriteAllText(Path.Combine(ExportFolder, fileName), JSON.Dump(zones.Select(ExportCopy).ToList()));
+                Mod.Log.Info($"Exported {zones.Count} zone(s) to '{fileName}'.");
+                return fileName;
+            }
+            catch (Exception ex)
+            {
+                Mod.Log.Error(ex, "Could not export zones.");
+                return null;
+            }
+        }
+
+        /// <summary>Exported zone files, newest first (file names).</summary>
+        public List<string> ExportFiles()
+        {
+            try
+            {
+                return Directory.Exists(ExportFolder)
+                    ? new DirectoryInfo(ExportFolder).GetFiles("*.json")
+                        .OrderByDescending(f => f.LastWriteTimeUtc)
+                        .Select(f => f.Name)
+                        .ToList()
+                    : new List<string>();
+            }
+            catch (Exception ex)
+            {
+                Mod.Log.Warn(ex, "Could not list the exported zones.");
+                return new List<string>();
+            }
+        }
+
+        /// <summary>
+        /// Adds the zones of an exported file as new zones (first in the list) and
+        /// returns the first one, or null when the file cannot be read. Buildings of
+        /// assets that are not installed stay in the zone and simply never grow.
+        /// </summary>
+        public PaletteDefinition Import(string fileName)
+        {
+            try
+            {
+                var path = Path.Combine(ExportFolder, Path.GetFileName(fileName ?? string.Empty));
+                if (!File.Exists(path))
+                {
+                    return null;
+                }
+
+                var data = JSON.MakeInto<List<PaletteDefinition>>(JSON.Load(File.ReadAllText(path)));
+                if (data == null || data.Count == 0)
+                {
+                    return null;
+                }
+
+                PaletteDefinition first = null;
+                for (var i = data.Count - 1; i >= 0; i--)
+                {
+                    var source = data[i];
+                    if (source == null)
+                    {
+                        continue;
+                    }
+
+                    var name = string.IsNullOrWhiteSpace(source.Name) ? DefaultName(source.Category, source.Density) : source.Name.Trim();
+                    if (_palettes.Any(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        name += " (imported)";
+                    }
+
+                    var zone = ExportCopy(source);
+                    zone.Name = name;
+                    if (string.IsNullOrEmpty(zone.Color) ||
+                        _palettes.Any(p => string.Equals(p.Color, zone.Color, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        zone.Color = ZoneColors.NextFree(_palettes.Select(p => p.Color));
+                    }
+
+                    _palettes.Insert(0, zone);
+                    first = zone;
+                }
+
+                Mod.Log.Info($"Imported {data.Count} zone(s) from '{Path.GetFileName(path)}'.");
+                ColorVersion++;
+                Touch();
+                Save();
+                return first;
+            }
+            catch (Exception ex)
+            {
+                Mod.Log.Error(ex, $"Could not import '{fileName}'.");
+                return null;
+            }
+        }
+
+        /// <summary>A zone's settings under a new id (what is shared).</summary>
+        private static PaletteDefinition ExportCopy(PaletteDefinition source) => new()
+        {
+            Name = source.Name,
+            Category = source.Category,
+            Density = source.Category == ZoneCategory.Residential ? source.Density : DensityType.Any,
+            Families = new HashSet<string>(source.Families ?? new HashSet<string>()),
+            LevelUp = source.LevelUp,
+            KeepDesign = source.KeepDesign,
+            Growth = source.Growth,
+            Icon = source.Icon ?? string.Empty,
+            Color = source.Color ?? string.Empty,
+        };
+
+        private static string SafeFileName(string name)
+        {
+            var invalid = Path.GetInvalidFileNameChars();
+            var clean = new string((name ?? string.Empty).Select(c => invalid.Contains(c) ? '_' : c).ToArray()).Trim();
+            return clean.Length == 0 ? "Zone" : clean;
         }
 
         /// <summary>Adds or removes one building (family at a level) from a zone.</summary>
@@ -177,6 +333,19 @@ namespace CustomZones.Storage
             }
 
             palette.KeepDesign = keepDesign;
+            Touch();
+            Save();
+        }
+
+        public void SetGrowth(string paletteId, GrowthMode growth)
+        {
+            var palette = GetById(paletteId);
+            if (palette == null || palette.Growth == growth)
+            {
+                return;
+            }
+
+            palette.Growth = growth;
             Touch();
             Save();
         }
@@ -289,6 +458,7 @@ namespace CustomZones.Storage
                 {
                     palette.Families ??= new HashSet<string>();
                     palette.AllowedBuildings ??= new HashSet<string>();
+                    palette.Icon ??= string.Empty;
 
                     // v0.1 stored individual prefabs: keep their families instead.
                     if (palette.AllowedBuildings.Count > 0)

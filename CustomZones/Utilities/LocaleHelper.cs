@@ -39,12 +39,29 @@ namespace CustomZones.Utilities
 
                 var dictionary = JSON.MakeInto<Dictionary<string, string>>(JSON.Load(reader.ReadToEnd()));
                 _locales[localeId] = dictionary;
+            }
 
-                GameManager.instance.localizationManager.AddSource(localeId, new DictionarySource(dictionary));
+            // Every translation is completed with English for any text it lacks.
+            _locales.TryGetValue("en-US", out var enUs);
+            foreach (var pair in _locales)
+            {
+                var dictionary = pair.Value;
+                if (enUs != null && pair.Key != "en-US")
+                {
+                    foreach (var entry in enUs)
+                    {
+                        if (!dictionary.ContainsKey(entry.Key))
+                        {
+                            dictionary[entry.Key] = entry.Value;
+                        }
+                    }
+                }
+
+                GameManager.instance.localizationManager.AddSource(pair.Key, new DictionarySource(dictionary));
             }
 
             // Fall back to en-US for locales without a translation.
-            if (_locales.TryGetValue("en-US", out var enUs))
+            if (enUs != null)
             {
                 foreach (var localeId in GameManager.instance.localizationManager.GetSupportedLocales())
                 {

@@ -38,6 +38,13 @@ namespace CustomZones.Domain
         /// <summary>Distinct lot widths of the level-1 members, ascending.</summary>
         public int[] LotWidths = Array.Empty<int>();
 
+        /// <summary>Distinct lot depths of the level-1 members, ascending.</summary>
+        public int[] LotDepths = Array.Empty<int>();
+
+        /// <summary>Lowest and highest building of the family, in metres (0 = unknown).</summary>
+        public float MinHeight;
+        public float MaxHeight;
+
         /// <summary>Distinct level-1 lot sizes ("2x3"), ordered by width then depth.</summary>
         public string[] LotSizes = Array.Empty<string>();
 
@@ -106,6 +113,47 @@ namespace CustomZones.Domain
 
         public static bool IsSelected(PaletteDefinition zone, string familyKey, int level) =>
             zone != null && zone.Families.Contains(SelectionKey(familyKey, level));
+
+        /// <summary>
+        /// The selections that may be born: level 1 like in the game, or each
+        /// design's lowest ticked level when the zone skips levels.
+        /// </summary>
+        public static IEnumerable<string> BornSelections(PaletteDefinition zone, Func<string, int, bool> exists)
+        {
+            if (zone.Growth == GrowthMode.LikeGame)
+            {
+                foreach (var selection in zone.Families)
+                {
+                    ParseSelection(selection, out var key, out var level);
+                    if (level == 1 && exists(key, level))
+                    {
+                        yield return selection;
+                    }
+                }
+
+                yield break;
+            }
+
+            var lowest = new Dictionary<string, int>();
+            foreach (var selection in zone.Families)
+            {
+                ParseSelection(selection, out var key, out var level);
+                if (!exists(key, level))
+                {
+                    continue;
+                }
+
+                if (!lowest.TryGetValue(key, out var known) || level < known)
+                {
+                    lowest[key] = level;
+                }
+            }
+
+            foreach (var kv in lowest)
+            {
+                yield return SelectionKey(kv.Key, kv.Value);
+            }
+        }
 
         public static bool AnySelected(PaletteDefinition zone, string familyKey)
         {
@@ -197,6 +245,9 @@ namespace CustomZones.Domain
             family.CanGrow = growable.Count > 0;
 
             family.LotWidths = pool.Select(m => m.LotSize.x).Distinct().OrderBy(w => w).ToArray();
+            family.LotDepths = pool.Select(m => m.LotSize.y).Distinct().OrderBy(d => d).ToArray();
+            family.MinHeight = members.Min(m => m.Height);
+            family.MaxHeight = members.Max(m => m.Height);
             family.LotSizes = pool
                 .Select(m => m.LotSize)
                 .Distinct()
@@ -263,6 +314,18 @@ namespace CustomZones.Domain
         /// <summary>0 = any; otherwise families with a level-1 lot of this width (6 = 6 or more).</summary>
         public int LotWidth;
 
+        /// <summary>0 = any; otherwise families with a level-1 lot of this depth (6 = 6 or more).</summary>
+        public int LotDepth;
+
+        /// <summary>0 = any; otherwise a height band (see <see cref="HeightBands"/>).</summary>
+        public int HeightBand;
+
+        /// <summary>Height bands of the filter, in metres: [band - 1] = (from, to).</summary>
+        public static readonly (float from, float to)[] HeightBands =
+        {
+            (0f, 10f), (10f, 20f), (20f, 40f), (40f, 80f), (80f, float.MaxValue),
+        };
+
         /// <summary>0 = any; otherwise only families that have this level (shown at that level).</summary>
         public int Level;
 
@@ -298,6 +361,21 @@ namespace CustomZones.Domain
                 query = LotWidth >= 6
                     ? query.Where(f => f.LotWidths.Any(w => w >= 6))
                     : query.Where(f => f.LotWidths.Contains(LotWidth));
+            }
+
+            if (LotDepth > 0)
+            {
+                query = LotDepth >= 6
+                    ? query.Where(f => f.LotDepths.Any(d => d >= 6))
+                    : query.Where(f => f.LotDepths.Contains(LotDepth));
+            }
+
+            if (HeightBand > 0 && HeightBand <= HeightBands.Length)
+            {
+                var (from, to) = HeightBands[HeightBand - 1];
+
+                // Any of its levels within the band (heights grow with the level).
+                query = query.Where(f => f.MaxHeight >= from && f.MinHeight < to);
             }
 
             if (!string.IsNullOrEmpty(Pack))

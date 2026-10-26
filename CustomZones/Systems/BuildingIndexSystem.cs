@@ -383,6 +383,9 @@ namespace CustomZones.Systems
                 Density = ResolveDensity(entity, zonePrefabEntity),
                 Level = spawnable.m_Level,
                 LotSize = buildingData.m_LotSize,
+                Height = EntityManager.HasComponent<ObjectGeometryData>(entity)
+                    ? EntityManager.GetComponentData<ObjectGeometryData>(entity).m_Size.y
+                    : 0f,
                 Packs = CollectPacks(buildingPrefab, zonePrefab),
                 ThemeName = themeName,
                 ThemeIcon = themeIcon,

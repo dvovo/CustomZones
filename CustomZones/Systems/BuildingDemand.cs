@@ -6,6 +6,7 @@ namespace CustomZones.Systems
 {
     using System.Collections.Generic;
     using Colossal.Entities;
+    using Game.Buildings;
     using Game.Economy;
     using Game.Prefabs;
     using Game.Simulation;
@@ -29,7 +30,7 @@ namespace CustomZones.Systems
         private readonly CommercialDemandSystem m_Commercial;
         private readonly IndustrialDemandSystem m_Industrial;
 
-        private readonly Dictionary<Entity, (Resource goods, Kind kind)> m_Goods = new();
+        private readonly Dictionary<Entity, (Resource goods, Kind kind, ZoneDensity density)> m_Goods = new();
 
         private int3 m_ResidentialDemand;
         private int[] m_CommercialDemands = System.Array.Empty<int>();
@@ -98,19 +99,30 @@ namespace CustomZones.Systems
         public Resource GoodsOf(BuildingEntry building) => Describe(building.PrefabEntity).goods;
 
         /// <summary>
+        /// The residential demand bar a density uses (0 low, 1 medium, 2 high), the
+        /// same classification the game applies to the building's own zone
+        /// (PropertyUtils.GetZoneDensity): row housing and medium are both medium.
+        /// </summary>
+        public static int ResidentialBar(ZoneDensity density) => density == ZoneDensity.Low ? 0 : density == ZoneDensity.Medium ? 1 : 2;
+
+        /// <summary>
         /// The city's demand for one more building like this one in the given zone
         /// (a building grows only when it is at least 1).
         /// </summary>
         public int DemandFor(BuildingEntry building, PaletteDefinition zone)
         {
-            var (goods, kind) = Describe(building.PrefabEntity);
+            var (goods, kind, density) = Describe(building.PrefabEntity);
             switch (kind)
             {
                 case Kind.Residential:
-                    var density = zone?.Density ?? building.Density;
-                    return density == DensityType.Low ? m_ResidentialDemand.x
-                        : density == DensityType.High ? m_ResidentialDemand.z
-                        : m_ResidentialDemand.y;
+                    // The bar of the building's own density (the game counts homes
+                    // and vacancies per density from the building's zone).
+                    return ResidentialBar(density) switch
+                    {
+                        0 => m_ResidentialDemand.x,
+                        1 => m_ResidentialDemand.y,
+                        _ => m_ResidentialDemand.z,
+                    };
                 case Kind.Commercial:
                     return Sum(m_CommercialDemands, goods);
                 case Kind.Industrial:
@@ -143,32 +155,34 @@ namespace CustomZones.Systems
             return string.Empty;
         }
 
-        private (Resource goods, Kind kind) Describe(Entity prefab)
+        private (Resource goods, Kind kind, ZoneDensity density) Describe(Entity prefab)
         {
             if (m_Goods.TryGetValue(prefab, out var known))
             {
                 return known;
             }
 
-            var result = (Resource.NoResource, Kind.Other);
+            var result = (Resource.NoResource, Kind.Other, ZoneDensity.Low);
             if (m_EntityManager.TryGetComponent<SpawnableBuildingData>(prefab, out var spawnable) &&
                 m_EntityManager.TryGetComponent<ZoneData>(spawnable.m_ZonePrefab, out var zone) &&
                 m_EntityManager.TryGetComponent<BuildingPropertyData>(prefab, out var properties))
             {
+                m_EntityManager.TryGetComponent<ZonePropertiesData>(spawnable.m_ZonePrefab, out var zoneProperties);
+                var density = PropertyUtils.GetZoneDensity(zone, zoneProperties);
                 switch (zone.m_AreaType)
                 {
                     case AreaType.Residential:
-                        result = (Resource.NoResource, Kind.Residential);
+                        result = (Resource.NoResource, Kind.Residential, density);
                         break;
                     case AreaType.Commercial:
-                        result = (properties.m_AllowedSold, Kind.Commercial);
+                        result = (properties.m_AllowedSold, Kind.Commercial, density);
                         break;
                     case AreaType.Industrial:
                         result = m_EntityManager.HasComponent<WarehouseData>(prefab)
-                            ? (properties.m_AllowedStored, Kind.Storage)
+                            ? (properties.m_AllowedStored, Kind.Storage, density)
                             : m_EntityManager.HasComponent<OfficeBuilding>(prefab)
-                                ? (properties.m_AllowedManufactured, Kind.Office)
-                                : (properties.m_AllowedManufactured, Kind.Industrial);
+                                ? (properties.m_AllowedManufactured, Kind.Office, density)
+                                : (properties.m_AllowedManufactured, Kind.Industrial, density);
                         break;
                 }
             }

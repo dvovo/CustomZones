@@ -2,38 +2,139 @@
 	<!--Id must be set to a value for an update of an existing mod. 0 means a new mod.-->
 	<ModId Value="0" />
 	<DisplayName Value="Custom Zones" />
-	<ShortDescription Value="Choose exactly which buildings may grow in each zoning area (district)." />
+	<ShortDescription Value="Make your own zones and choose exactly which buildings grow in them. Uses the game's normal demand." />
 	<LongDescription>
 # Custom Zones
 
-Create **zoning palettes** (named building whitelists) using a filterable building browser
-(zone type, density, lot size, level, theme, text search), then assign a palette to any district.
-Inside that district, **only the selected buildings will spawn** - everything else is filtered out at birth.
+**Make your own zones and choose exactly which buildings grow in them.**
 
-## Features
-- Saved palettes submenu: create, rename, duplicate, delete.
-- Building browser with thumbnails (Asset Icon Library) and Find It-style filters.
-- Per-district assignment, persisted in the savegame.
-- Optional retroactive enforcement of existing buildings.
+A custom zone is painted like any other zone and grows with the city's normal demand, but only the buildings you picked can appear in it. Want a street of red-brick row houses only, a farm belt without factories, or a downtown of glass towers? Make a zone for it.
 
-## Recommended companion mods
-- Asset Icon Library (building thumbnails)
-- Unified Icon Library (UI icons)
+**Beta:** this is a test version, and it touches how your city grows, so your feedback matters. If something looks wrong, please post in the **discussion** of this page (also reachable from the game's mod menu) with what you did and your log file: Cities Skylines II, Logs, CustomZones.log. Ideas are welcome there too.
+
+## Quick start
+1. Open the **zoning tool**. In the tool options, next to **Custom Zones**, click the button to open the panel.
+2. Click **New zone** and choose the game zone it behaves like: low, row, medium or high density residential, mixed housing, commercial, industrial or office.
+3. In the building list, **click the buildings you want**. A tick shows they are in the zone.
+4. Pick your zone in the **Custom Zones tab** of the zoning toolbar and **paint it along roads**, like any other zone.
+
+Picking a zone in the toolbar also selects it in the panel.
+
+## The building list
+- **Click a card** to add the building with all its levels. Click it again to remove it.
+- **The numbers 1 to 5** under the picture are its levels. Click one to add or remove only that level. Hover a number to see that level on the card.
+  - **Filled:** this level is in the zone.
+  - **Outlined:** the level shown on the picture.
+  - **Dim:** the building has no such level.
+- **A red warning** means the city does not need what it sells or makes right now, so it will not grow yet.
+- **Filters:** type, lot width and depth, height, level and source (base game or mods), plus a search box.
+- **In this zone** shows only the buildings you picked. **Can grow now** shows only the ones the city wants right now.
+- The buttons above the filters **add all shown**, **remove all shown** and **reset the filters**.
+
+## The large preview
+Click the **magnifier** on a card to see the building big, with all its levels.
+- Zoom with the mouse wheel and drag to look around.
+- Step through the list with the arrows, and press 1 to 5 to change the level.
+- **This level grows in this zone** (Space) adds or removes the level you are looking at. **All its levels** (A) adds or removes all of them.
+- The round button **places the building in the city**, so you can see how it looks. Press Escape to come back.
+
+## The zone window
+Click the **pencil** next to a zone.
+- **Name, colour and icon.** Use a game icon, one of your saved icons, or design your own (see below).
+- **Behaves like:** the game zone whose demand it uses.
+- **Growth**, **Level up** and **Prefer same design**: how buildings start and level up (see the next sections).
+- **Warnings** tell you when something is missing:
+  - lot widths no building fits (those lots stay empty);
+  - nothing can be born (no starting level ticked);
+  - lot sizes where buildings stop levelling up, and at which level (tick more levels or buildings of that size to let them go higher);
+  - why nothing is growing right now (no free lots, nothing fits, no demand, or the spot scores too low).
+- **Statistics** for this city: painted cells, buildings, households and workers.
+- Buttons to **export**, **duplicate** and **delete** the zone. Deleting unzones its painted cells, like erasing zoning in the game.
+
+## Levels in short
+In the game, buildings start small and **level up** over time when they are well looked after. A higher level means a bigger or nicer building, more homes or jobs, higher rent and upkeep, and jobs that need more education.
+
+Many buildings have their own look for each level. Some reuse the same look for two levels (the large preview shows "Level 2 = L1"), and a few only exist at a high level.
+
+## Growth: two ways
+**Like the game (default).** New buildings start at **level 1** and go up **one level at a time**. When the game levels a building up, it becomes one of the buildings you ticked **for the next level**. If you ticked nothing for that level that fits the lot, the building stays where it is. Tick level 1 of a building so it can appear at all.
+
+**Prefer same design** (on by default, only for "Like the game") decides which building it becomes:
+- **On:** it keeps its look when you ticked its own next level. Only when you did not, it becomes another building you ticked for that level.
+- **Off:** it becomes any building you ticked for the next level, at random, like the game does with all its zones. Good for a varied, mixed street.
+- Example: you ticked red brick houses at levels 1 to 3 and a glass block at level 3. With the option on, a red brick house at level 2 becomes the red brick level 3. With it off, it may become either.
+
+**Skip levels.** Each building **keeps its own look**. It starts at the **lowest level you ticked** and levels up to its **next ticked level**, skipping the ones you did not tick. For example, tick 1, 3 and 5 and it goes 1, 3, 5. It never turns into a different building. This also lets you use buildings the game only has at a high level.
+- Skipping is **not a shortcut**: the building waits as long as the game would take for the levels in between.
+- **Mind the economy:** a building that starts above level 1 asks for that level's rent from day one, and its jobs need better educated workers. In a young or poor city it may struggle or stay empty.
+
+**Level up** (on by default): turn it off and buildings in this zone keep the level they were born with forever. Other zones keep levelling up as usual.
+
+## Level buttons in the building panel
+Select any zoned building (in a custom zone or a normal game zone) and its info panel gets two buttons:
+- **Level up:** the building goes up a level right now. In a custom zone it follows the zone's Growth and Prefer same design settings, and it works even when "Level up" is off there, because you asked for it. In a game zone it becomes a building of the next level, like the game would choose.
+- **Choose level:** a small list of levels 1 to 5, next to the panel. Pick one to turn the building into that level now, **up or down**. Its own design is used when it has that level; otherwise another building of that level (one you ticked, in a custom zone). Levels it cannot become are dim: there is no building of that level that fits the lot, makes the same goods, has a home for every household living there and is low enough for that spot. So **residents always keep their home**.
+- **Jobs change with the level**, just as in a normal level-up: higher levels want more educated workers, lower levels fewer and less educated ones, so some workers may have to find another job.
+- These changes are instant and skip the waiting, so use them as a design tool. Buildings marked **historic** are never changed.
+- Turn the buttons off in the options if you do not want them.
+
+## Icon designer
+Draw a zone icon in the style of the game's zone icons. Start from one of many models, then change the shape, roof, facade, ground, trees, colours and dozens of details. **Save** the ones you like: they stay in your icon library for every zone.
+
+## Sharing zones
+- **Export** one zone from its window, or all of them with the import button at the top of the panel.
+- To **import**, put a zone file in the exports folder (the options have a button to open it) and pick it in the import list.
+- Buildings from assets you do not have are kept in the zone but never grow.
+
+## Options
+- **Keep buildings placed by hand** (on by default): growable buildings you place yourself (with the placement tool, Find It or similar) are not condemned while the zone under them stays the same.
+- **Level buttons in the building panel:** show or hide them.
+- **Open the exported zones folder.**
+- **Clear the icon library.**
+
+## Strongly recommended: Building Icon Generator
+Custom Zones works on its own, but **Building Icon Generator** (by the same author) gives every building in the list and in the large preview a real full colour picture. Without it, buildings the game has no icon for get a plain grey drawing.
+
+## Good to know
+- **Demand is never changed.** The mod only reads it. Buildings grow with the same rules as the game's own zones, so nothing grows when the city does not need it.
+- **Milestones still count.** Buildings of a zone your city has not unlocked yet do not grow, even in a custom zone, until you unlock it. The zone window tells you when this happens.
+- **Lots must fit.** The game cuts a zone into lots 1 to 6 or more cells wide. A lot only gets a building if your zone has one of that exact width. The zone window warns you about missing widths.
+- **Condemning works like the game.** Changing the zone under a building, or removing it from the zone's list, condemns it if it no longer fits.
+- **Your zones are kept between cities.** Every city can use them.
+
+## Compatibility
+- **Do not use it with other mods that change how zones grow** (other custom zone mods).
+- **Plop the Growables** works together with it.
+- **Before removing the mod**, delete your custom zones in each city where you painted them (the zone window unzones their cells).
+
+12 languages: English, Spanish, German, French, Italian, Brazilian Portuguese, Polish, Russian, Japanese, Korean, Simplified and Traditional Chinese.
 	</LongDescription>
 	<!--Thumbnail-->
 	<Thumbnail Value="Properties/Thumbnail.png" />
 	<!--Screenshot, can be set multiple times-->
-	<Screenshot Value="" />
+	<Screenshot Value="Properties/Screenshots/1.png" />
+	<Screenshot Value="Properties/Screenshots/2.png" />
+	<Screenshot Value="Properties/Screenshots/11.png" />
+	<Screenshot Value="Properties/Screenshots/8.png" />
+	<Screenshot Value="Properties/Screenshots/9.png" />
+	<Screenshot Value="Properties/Screenshots/10.png" />
+	<Screenshot Value="Properties/Screenshots/3.png" />
+	<Screenshot Value="Properties/Screenshots/4.png" />
+	<Screenshot Value="Properties/Screenshots/5.png" />
+	<Screenshot Value="Properties/Screenshots/6.png" />
+	<Screenshot Value="Properties/Screenshots/7.png" />
 	<!--Tag, can be set multiple times-->
 	<Tag Value="Code Mod" />
-	<!--Link to the forum post where the mod can be discussed-->
+	<!--Link to the forum thread of the mod's discussion. After turning the discussion on in the
+	    Paradox Mods page editor, paste its address here so later publishes keep it.-->
 	<ForumLink Value="" />
 	<!--Version of the mod-->
-	<ModVersion Value="0.1.0" />
+	<ModVersion Value="1.0.0-beta.1" />
 	<!--Recommended version of the base game to use the mod-->
-	<GameVersion Value="1.3.*" />
-	<!--Dependencies for the mod. Asset Icon Library is soft-required for thumbnails.-->
-	<Dependency Id="" />
-	<ChangeLog>Initial release.</ChangeLog>
-	<ExternalLink Type="github" Url="" />
+	<GameVersion Value="1.6.*" />
+	<ChangeLog>First beta release.</ChangeLog>
+	<!--GitHub button of the page: uncomment once the repository is public
+	<ExternalLink Type="github" Url="https://github.com/dvovo/CustomZones" />-->
+	<!--Private while we test it; set to Public for the public release-->
+	<AccessLevel Value="Private" />
 </Publish>

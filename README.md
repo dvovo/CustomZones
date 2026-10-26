@@ -1,132 +1,199 @@
-# CustomZones — Mod para Cities: Skylines 2
+![Custom Zones](Branding/Cabecera_1920x480.png)
 
-Mod que permite crear **"paletas" de edificios** (listas blancas seleccionadas manualmente) y asignarlas a áreas de zonificación, de modo que en esa área **solo crezcan los edificios que tú has elegido** y ningún otro.
+# Custom Zones
 
----
+A Cities: Skylines II code mod. It lets players create their own zone types and choose exactly which growable buildings may spawn and level up in each of them, while the game's demand, growth and economy rules stay in charge.
 
-## ¿Qué hace?
+> Strongly recommended: [Building Icon Generator](https://github.com/dvovo/BuildingIconGenerator), by the same author, for a real picture of every building in the browser.
 
-1. **Crea paletas**: una paleta es una plantilla con nombre que contiene los edificios spawnables que quieres permitir. Las paletas se guardan globalmente (disponibles en todas tus partidas) y aparecen en un submenú propio.
-2. **Selecciona edificios con filtros**: el panel de edición incluye un navegador de todos los edificios zonificables del juego (y de assets de mods/regiones instalados) con filtros de:
-   - **Tipo de zona**: Residencial, Mixta, Comercial, Industrial, Oficina.
-   - **Densidad**: Low, Row (adosados), Medium, High, Signature (singulares).
-   - **Tamaño de parcela**: ancho y fondo (1–9, "10+").
-   - **Nivel** del edificio (1–5).
-   - **Tema/región** (European, North American, packs de regiones…).
-   - **Búsqueda por texto** y vista de "solo seleccionados".
-3. **Asigna la paleta a un área**: las áreas se gestionan mediante **distritos** del juego. En la pestaña *Distritos* eliges qué paleta aplica a cada distrito. La asignación se guarda dentro del savegame.
-4. **Aplica la restricción**: cuando el juego hace crecer un edificio dentro de un distrito con paleta, el mod lo valida; si el edificio no está en la lista blanca, se elimina inmediatamente y el juego vuelve a intentar el spawn hasta que aparece uno permitido.
+- **Status:** beta (`1.0.0-beta.1`), built against game version 1.6.2f1.
+- **Player guide:** [DESCRIPTION.md](DESCRIPTION.md) is the text of the Paradox Mods page and explains every option from the player's side. This README covers how the mod works.
+- **Bugs and ideas:** open an issue with the templates of this repository (please attach `CustomZones.log`), or post in the discussion of the mod's Paradox Mods page.
+- **Images:** the mod icon, thumbnail, banner and social image are in `Branding/`; the gallery is in `CustomZones/Properties/Screenshots/`.
 
-## Cómo funciona por dentro (arquitectura v2: zonas pintables)
+Author: **dvovo** — [Paradox Mods](https://mods.paradoxplaza.com/authors/dvovo) · [Source](https://github.com/dvovo/CustomZones) · Developed with the help of AI · License: [MIT](LICENSE)
 
-**Cada paleta es un tipo de zona real del juego.** Es el mismo mecanismo nativo que usan los region packs (EU/NA/UK/FR/DE/JP): el `ZoneSpawnSystem` vanilla solo considera los prefabs de edificio cuya zona coincide con la pintada en la celda (agrupación por `BuildingSpawnGroupData`). Al convertir la paleta en zona, **el juego solo recorre los edificios de la paleta de forma nativa**, sin filtrado posterior ni intentos desperdiciados.
+## At a glance
 
-`PaletteZoneSystem` (calcado del `P_PrefabsCreateSystem` de Platter, que demuestra que cada paso funciona):
+| | |
+| --- | --- |
+| ![Reading a building card](CustomZones/Properties/Screenshots/11.png) | ![Two ways to grow](CustomZones/Properties/Screenshots/8.png) |
+| ![Prefer same design](CustomZones/Properties/Screenshots/9.png) | ![Level buttons](CustomZones/Properties/Screenshots/10.png) |
 
-1. Crea **una pestaña "Paletas"** en la barra de zonificación: un `UIAssetCategoryPrefab` enganchado al mismo `m_Menu` que la categoría vanilla "ZonesOffice", con icono `ColorPalette` de UIL.
-2. Por cada paleta, **clona un `ZonePrefab`** (`PrefabBase.Clone`) tomando como base la zona del primer edificio permitido (así hereda `ZoneProperties` coherentes: economía, tipo de área, oficina...). Le asigna un **color estable derivado del hash** de la paleta para reconocer las áreas pintadas, y un `UIObject` con `m_Group` = nuestra pestaña.
-3. Por cada edificio permitido, **clona el `BuildingPrefab`** y apunta su `SpawnableBuilding.m_ZoneType` a la zona-paleta. Tras la inicialización del `PrefabSystem`, el job de spawn vanilla lo agrupa bajo el tipo de zona de la paleta.
-4. Todo se crea en `OnGamePreload` —**antes de deserializar el savegame**— con nombres deterministas derivados de `palettes.json`, así los edificios construidos con clones cargan bien en sesiones futuras (mismo punto de instalación que Platter).
+## Contents
 
-`SpawnFilterSystem` queda reducido a una **red de seguridad mínima**: como los prefabs no se pueden des-registrar en runtime, si quitas un edificio de una paleta en mitad de la partida su clon sigue en el pool; este sistema elimina esos spawns al nacer (caso raro, coste despreciable).
+- [Design rules](#design-rules)
+- [Project layout](#project-layout)
+- [Custom zones as prefabs](#custom-zones-as-prefabs)
+- [Building index and families](#building-index-and-families)
+- [Spawning](#spawning)
+- [Zone check and condemnation](#zone-check-and-condemnation)
+- [Levelling up](#levelling-up)
+- [UI](#ui)
+- [Data files](#data-files)
+- [Saved components](#saved-components)
+- [Compatibility notes](#compatibility-notes)
+- [Building from source](#building-from-source)
+- [Logs and bug reports](#logs-and-bug-reports)
 
-**Limitaciones documentadas**: si borras una paleta, su zona sigue existiendo durante la sesión pero deja de generar nada (sus clones quedan vetados); las paletas que mezclan tipos de área (R+C+I) heredan la economía del primer edificio, así que lo ideal es una paleta por tipo de zona; y si desinstalas el mod, los edificios de paleta de tus partidas guardadas desaparecerán al cargar (el juego poda prefabs ausentes).
+## Design rules
 
-## Miniaturas e iconos (corregido)
+1. **Demand is read, never written.** The mod never changes the residential, commercial, industrial or office demand, or any economy value.
+2. **The game's own jobs do the work.** Spawning, the zone check and level-ups run the game's code paths. The mod only narrows the candidate buildings to the ones a zone allows, and steps aside when something unexpected happens.
+3. **The economy follows the prefab.** Rent, upkeep, homes, workplaces, education mix and abandonment all come from the prefab and level the game finally builds. The mod never edits those values; it only chooses which prefab is built.
 
-Las miniaturas usan la **API del juego** `ImageSystem.GetThumbnail(prefab)` con fallback `GetIconOrGroupIcon(zona)` vía `onError` en la UI — exactamente como Find It. **Asset Icon Library no expone ninguna URL `coui://ail/`**: funciona sustituyendo las miniaturas del propio juego, así que con AIL instalado las imágenes mejoran solas sin código. Los iconos de los filtros de categoría se resuelven en runtime desde zonas reales (binding `CategoryIcons`), eliminando los 404 de nombres de archivo que varían entre versiones. Iconos UIL verificados contra el repositorio: `ColorPalette`, `RectangleCopy`, `BuildingZoneSignature`, `LowLevel`, `Row`, `MediumLevel`, `HighLevel`, `StarAll`, `Plus`, `Pencil`, `Trash`, `Reset`, `XClose`, `Checkmark`, `ArrowUp`, `ArrowDown`.
+## Project layout
 
-## Inventario de iconos e imágenes
+| Path | Contents |
+| --- | --- |
+| `CustomZones/Mod.cs` | Entry point: registers systems, update order, settings, locales. |
+| `CustomZones/Setting.cs` | Options page (`ModSetting`). |
+| `CustomZones/Domain/` | `PaletteDefinition` (a zone), `GrowthMode`, filters, building families and selection keys, UI entry types. |
+| `CustomZones/Storage/` | `PaletteStorage` (zone library, export / import) and `IconLibrary` (saved icons). |
+| `CustomZones/Prefab/` | `PaletteZonePrefab`, the runtime zone prefab type. |
+| `CustomZones/Components/` | `PaletteZoneMarker` and the `PaletteAllowedBuilding` buffer. |
+| `CustomZones/Systems/` | All ECS systems (below). |
+| `CustomZones/Integration/BigIcons.cs` | Reflection client for Building Icon Generator (no hard reference). |
+| `CustomZones/Utilities/` | Zone icon recolouring and the icon designer renderer, UI binding helpers, locale loader. |
+| `CustomZones/Locale/*.json` | 12 languages. Missing keys fall back to `en-US`. |
+| `CustomZones/UI/` | React / TypeScript UI module (cs2 UI toolchain, webpack). |
+| `CustomZones/Properties/` | `PublishConfiguration.xml`, thumbnail and gallery images. |
 
-**El mod no incluye ningún icono ni imagen propios**: todo lo visual procede del juego base o de las dos librerías de iconos. Desglose completo:
+**Systems and where they run:**
 
-| Uso | Recurso | Origen |
-|---|---|---|
-| Botón principal del mod | `coui://uil/Colored/Zones.svg` | Unified Icon Library |
-| Crear paleta (+) | `coui://uil/Standard/Plus.svg` | Unified Icon Library |
-| Renombrar paleta | `coui://uil/Standard/Pencil.svg` | Unified Icon Library |
-| Duplicar paleta | `coui://uil/Standard/Copy.svg` | Unified Icon Library |
-| Eliminar paleta | `coui://uil/Standard/Trash.svg` | Unified Icon Library |
-| Cerrar panel | `coui://uil/Standard/XClose.svg` | Unified Icon Library |
-| Reset de filtros | `coui://uil/Standard/Reset.svg` | Unified Icon Library |
-| Marca de seleccionado | `coui://uil/Colored/Checkmark.svg` | Unified Icon Library |
-| Filtro "cualquiera" (zona/densidad) | `coui://uil/Standard/StarAll.svg` | Unified Icon Library |
-| Densidades Low/Row/Medium/High/Signature | `coui://uil/Standard/{LowLevel,Row,MediumLevel,HighLevel,Star}.svg` | Unified Icon Library |
-| Filtros de tipo de zona (R/Mixta/C/I/Oficina) | `Media/Game/Icons/Zone*.svg` | **Juego base** (atlas de UI vanilla) |
-| Miniaturas de edificios | `coui://ail/{PrefabName}.png` | Asset Icon Library |
-| Fallback de miniaturas | `ImageSystem.GetIconOrGroupIcon` → icono de la zona | Juego base |
+| System | Phase | Role |
+| --- | --- | --- |
+| `BuildingIndexSystem` | PrefabUpdate | Indexes every spawnable building prefab: zone category, density, level, lot size, height, goods, theme, asset packs. Groups them into families. |
+| `PaletteZoneSystem` | PrefabUpdate, before `ZoneSystem` | Creates one zone prefab per custom zone, the toolbar category and icons; fills each zone's allowed-building buffer. |
+| `PaletteZoneInitSystem` | PrefabUpdate, after `ZoneSystem` | Completes the zone prefabs' data once the game has initialised its own zones. |
+| `PaletteZoneSpawnSystem` | GameSimulation, before `ZoneSpawnSystem` | Replaces the game's zone spawner (the original is disabled). |
+| `LevelUpControlSystem` | GameSimulation, before `BuildingConstructionSystem` | Applies each zone's level-up rules; info panel level buttons. |
+| `PlacedByHandSystem` | ModificationEnd, before the zone check | Tags growable buildings placed by hand. |
+| `CustomZoneCheckSystem` | ModificationEnd | Replaces the game's `ZoneCheckSystem` (the original is disabled). |
+| `CustomZoneSaveSystem` | ModificationEnd | Obsolete; kept so cities saved with early test builds still load. |
+| `PaletteUISystem` | UIUpdate | Bindings and triggers of the panel, zone window, browser and preview. |
+| `IconGeneratorSystem` | UIUpdate | Fallback building pictures when the game and BIG have none. |
 
-El único recurso gráfico **propio** que tendrás que crear es ajeno a la interfaz: la **miniatura del mod para PDX Mods** (`Properties/Thumbnail.png`, referenciada al publicar en `PublishConfiguration.xml`) y las capturas de pantalla de la página del mod. Opcionalmente, si quieres una identidad visual propia, puedes sustituir el icono del botón principal por un SVG tuyo en `UI/src/` (webpack lo embebe); ahora mismo reutiliza el de UIL para no añadir assets.
+## Custom zones as prefabs
 
-## Estructura del proyecto
+- **Each custom zone is a real `ZonePrefab`** (`PaletteZonePrefab`, named `CZ_Zone_<id>`), created with `ScriptableObject.CreateInstance` and added through the prefab system, so it goes through the game's full prefab initialisation. It copies the components of the game zone it is based on (`m_AreaType`, office flag, density), without theme or unlock requirements, and has its own `UIObject` in the `CZ_PaletteCategory` toolbar tab.
+- **Timing:** the zones are created in `Mod.OnLoad`, before any city loads, because the zone prefabs must exist when the game maps the saved zone indices of a city. Zones created or deleted mid-game are added to the toolbar with an unlock refresh.
+- **Painting** is the game's own zoning tool. The zone colour is set on the prefab; the icon is either a recoloured game icon, a saved icon, or one drawn by the icon designer (`gen:` values rendered to SVG).
+- **Allowed buildings:** each zone entity has a `PaletteAllowedBuilding` buffer with the prefabs that may be **born** in it. It is rebuilt whenever the zone library or the building index changes.
+
+## Building index and families
+
+- **Family = one design at one lot size**, for example `EU_ResidentialMediumRow01|1x5`. Prefab names are parsed as `<family>_L<level>[_<W>x<D>]<rest>`; display names are read from the game's localisation.
+- **Selection key = family plus level**, `"<family>@<level>"`. A zone stores a set of these keys. Ticking a card adds every level the family has; the level pills toggle single keys.
+- **Level kinds** sent to the UI: `2` the family has a prefab at that level, `1` it has none but the game draws it with the level below, `0` nothing.
+- **Meshless prefabs** (for example some industrial storage lots that only place trees) are kept: they are valid spawnable buildings in the game.
+- **Pictures:** game icon (or Asset Icon Library), then a Building Icon Generator thumbnail, then the internal fallback renderer (grey untextured model), then the zone icon.
+
+## Spawning
+
+`PaletteZoneSpawnSystem` replaces `Game.Simulation.ZoneSpawnSystem`.
+
+- It runs the game's own spawn-area evaluation and building spawn job, with the same demand gates (empty demand bar = nothing of that type grows), the same per-building demand (by density for housing, by goods sold or made for companies) and the same lot scoring (land value, pollution, services, road access).
+- **On custom zone cells, the candidate list is the zone's allowed-building buffer** instead of every building of the base zone. Game zones are untouched.
+- **Each candidate is scored exactly as the game scores it on its own zone:** density demand, office detection (an industrial zone without process estimates), process estimates, corner and narrow-lot rules all come from the building's own zone prefab, so a custom zone may mix designs of several zones without changing how any of them is judged.
+- **Progression is kept:** custom zone prefabs carry no unlock requirement, so buildings whose own zone (or the building itself) is still `Locked` in the city are skipped, as they could not grow in the game before that milestone. The zone window shows how many are waiting.
+- **Which buildings are born** (`BuildingFamilies.BornSelections`):
+  - `GrowthMode.LikeGame`: the zone's level 1 selections, exactly like the game, whose `EvaluateSpawnAreas` only spawns level 1 buildings.
+  - `GrowthMode.SkipLevels`: each family's lowest selected level.
+- **Diagnosis:** for each custom zone, the furthest stage a free lot reached in the last pass (no lots, nothing fits, no demand, low score, growing). The zone window shows it as plain text.
+- **Safety:** if the spawn pass throws (for example after a game update changed a type it relies on), the system logs the error, re-enables the game's spawner and disables itself. Custom zones then stop growing, but the city keeps working.
+- The main-thread cost is measured and logged every 4096 passes.
+
+## Zone check and condemnation
+
+`CustomZoneCheckSystem` is the game's `ZoneCheckSystem` (which condemns a growable building whose zone changed), extended so that a custom zone cell is valid for the buildings in that zone's list.
+
+- Editing a zone's list re-checks the buildings standing on that zone, so a removed design is condemned like a building on the wrong zone.
+- **Buildings placed by hand** (the game's placement tool, "place it in the city", Find It and similar) get a `HandPlaced` component with a hash of the zones under their lot. While the hash does not change, the check skips them. When the zone under them changes, the normal rule applies. This can be turned off in the options.
+- Deleting a zone from the panel unzones its painted cells first, which condemns its buildings exactly like erasing zoning.
+
+## Levelling up
+
+The game levels a building up in `BuildingUpkeepSystem`: when its condition reaches the levelling cost, it requests construction materials (`ResourceNeeding`); when they arrive, `LevelupJob` picks a random building of the next level with the same zone, lot size, road access, goods, at least as many homes and a height that fits, and the condition goes back to 0. It does not keep the design.
+
+`LevelUpControlSystem` works on top of that, only on custom zones:
+
+- **Material stage.** Every 16 frames it looks at buildings that are gathering materials. If the building cannot level up at all under its zone's rules (level-up off, or no allowed building of the next level), the request is cancelled before anything is bought: condition back to 0 and notification removed, as after a level-up. The game's `GoodsDeliveryDispatchSystem` then drops the pending delivery requests, and a truck already on its way delivers nothing and is not paid (`DeliveryTruckAISystem.DeliverUpkeep` only delivers what a `ResourceNeeding` entry asks for). Buildings that can level up go through the game's material stage unchanged.
+- **Swap stage.** When the game has chosen the next prefab, the mod replaces the choice (`UnderConstruction.m_NewPrefab`) with one the zone allows, or cancels the level-up.
+- **Candidate rules** (`IsValidNext`), the same as the game's `LevelupJob`: same zone (a custom zone may mix designs of several zones, but a building only levels within its own), same lot size, road access and goods, at least as many homes as the current prefab, and a height that fits the lot's height limit.
+- **`LikeGame`:** next level only, among the zone's selections at that level. With "Prefer same design" the family's own next level wins if it is selected; otherwise a random candidate, like the game. No candidate: the building keeps its level.
+- **`SkipLevels`:** the family's own next selected level above the current one (`NextOwnLevel`), never another family.
+
+### Fair time for skipped levels
+
+The levelling cost grows by 4 per level (`40 · 4^level` per home for housing, more for companies) and the condition gain per upkeep tick grows by 2 per level (`amount · 2^level`). Level `k` therefore takes a time proportional to `2^k`.
+
+A building of level `c` that skips to level `t` lets the game's level-up come round
 
 ```
-CustomZones/
-├── CustomZones.sln
-└── CustomZones/
-    ├── Mod.cs                      # IMod: registro de sistemas y dependencias
-    ├── Setting.cs                  # Opciones del mod
-    ├── Components/Components.cs    # PaletteDistrict (ISerializable), PaletteChecked
-    ├── Domain/
-    │   ├── DomainModel.cs          # Enums, PaletteDefinition, BrowserFilters
-    │   └── UIBinding/UIEntries.cs  # DTOs para la UI (IJsonWritable)
-    ├── Systems/
-    │   ├── BuildingIndexSystem.cs  # Índice de prefabs spawnables
-    │   ├── SpawnFilterSystem.cs    # Enforcement de la lista blanca
-    │   └── PaletteUISystem.cs      # Bindings y triggers de la UI
-    ├── Storage/PaletteStorage.cs   # CRUD de paletas + JSON
-    ├── Utilities/                  # ExtendedUISystemBase, GenericUIWriter/Reader, LocaleHelper
-    ├── Locale/                     # en-US.json, es-ES.json
-    ├── Properties/PublishConfiguration.xml
-    └── UI/                         # React/TS (webpack → CSII_USERDATAPATH/Mods/CustomZones)
+1 + Σ 2^(k - c)   for k = c+1 .. t-1
 ```
 
-## Compilación
+times at its own level before it changes, which is the time the game would spend on the levels in between. For example, L3 to L5 takes 3 rounds of L3. Every round is a complete game level-up (materials requested, bought and delivered, condition back to 0, no upkeep while waiting); the extra rounds are cancelled at the swap stage, exactly as when the game finds no building to level into, and the zone statistics and level-up icon are taken back. The counter is the saved component `LevelSkipProgress { m_FromLevel, m_TargetLevel, m_Remaining }`.
 
-### Requisitos
+### Info panel buttons
 
-1. **Cities: Skylines II** instalado con el **Modding Toolchain** activado (Opciones → Modding en el juego, o instalar el toolchain desde el launcher). Esto define las variables de entorno:
-   - `CSII_TOOLPATH` → carpeta del toolchain (contiene `Mod.props` / `Mod.targets` y las DLLs del juego).
-   - `CSII_USERDATAPATH` → carpeta de datos de usuario del juego.
-2. **.NET SDK** (el proyecto es `net48`, lo compila el toolchain con MSBuild).
-3. **Node.js + npm** para la UI.
+"Level up" applies the zone's rules (or the game's on a game zone) immediately. "Choose level" lists every level the building can become on its lot, own design first. Both go through the game's own swap (`UnderConstruction` with `m_Progress = 255`, finished by `BuildingConstructionSystem`, the same path as a natural level-up: same entity, renters kept, sub-objects and nets rebuilt) and reset the building's levelling progress.
 
-### Pasos
+Side effects are kept consistent with the game:
 
-```bash
-# 1. UI: instalar dependencias (una sola vez)
-cd CustomZones/UI
-npm install
+- **Homes:** going down, the homes rule compares with the households living there instead of the current prefab, so no household loses its home.
+- **Jobs:** the education mix of a workplace depends on its level (`EconomyUtils.CalculateNumberOfWorkplaces`), so `WorkProviderSystem` lays off workers whose slot no longer exists, exactly as after a natural level-up. Industry and offices clamp their staff limit to the building every tick; shops do not, so after a downgrade the mod applies the clamp the game uses when a company moves in (`min(max, fitting)`, at least two thirds of `fitting`).
+- **Warehouses:** their capacity scales with level; stock above the new limit is exported by `StorageCompanySystem`.
+- **Zone statistics** (`ZoneBuiltRequirementSystem`, used for signature building and other unlocks): every change moves the building between levels in the same queue the game uses. A level-up the game had started and the mod cancels is moved back, its level-up icon removed, and a skip that ends above the game's choice is moved on to its real level.
 
-# 2. Compilar el mod (el target BuildUI ejecuta npm run build automáticamente)
-cd ..
-dotnet build
-```
+## UI
 
-El build copia la DLL y la UI compilada a `%CSII_USERDATAPATH%/Mods/CustomZones`, lista para probar en el juego.
+- React / TypeScript under `CustomZones/UI/src`, bound with `cs2/api` (`bindValue` / `trigger`).
+- **Panel:** zone list, import / export, building browser with filters and search. The browser is virtualised: C# sends only the visible rows (`Families`, plus `FamilyCount`, `ScrollIndex`), and the large preview gets its own `PreviewFamily` binding so it stays current when its card is off screen.
+- **Zone window:** name, colour, icon chooser and designer, base zone, growth mode, level-up options, coverage warnings (`Coverage`: lot widths with no building, `NoBirth`, `Stops`), statistics (`ZoneStats`, refreshed every 5 s while open).
+- **Selecting a custom zone in the zoning toolbar selects it in the panel.**
+- Vanilla components (checkbox, dropdown, colour field) are imported through the game's module registry (`vanilla.ts`).
 
-> **Nota sobre los types de `cs2/*`**: la UI importa módulos del juego (`cs2/api`, `cs2/modding`, `cs2/ui`...). Las definiciones de tipos (`.d.ts`) las genera el scaffolding oficial. Si TypeScript se queja de imports no resueltos, ejecuta `npx create-csii-ui-mod` en una carpeta temporal y copia su carpeta `types/` a `CustomZones/UI/`.
+## Data files
 
-## Dependencias recomendadas (en el juego)
+All under `%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\ModsData\CustomZones`:
 
-- **Asset Icon Library** (JadHajjar) — genera las miniaturas de los edificios (`coui://ail/...`). Sin él, el mod usa los iconos genéricos del juego.
-- **Unified Icon Library** (algernon) — iconos de la interfaz (`coui://uil/...`). Muy recomendado para que el panel se vea correctamente.
+| File | Contents |
+| --- | --- |
+| `palettes.json` | The zone library: a list of `PaletteDefinition` (id, name, category, density, colour, icon, `Families` selection keys, `LevelUp`, `KeepDesign`, `Growth`). Global, shared by every city. |
+| `icon-library.json` | Icons saved from the designer. |
+| `Exports/*.json` | Exported zones (the same fields without the id). Importing adds them as new zones; a clashing name gets "(imported)" and a used colour is replaced. |
+| `GeneratedIcons/` | Pictures drawn by the fallback renderer. |
 
-Ambas se declaran como dependencias en `PublishConfiguration.xml` al publicar en PDX Mods.
+Enums are stored by name.
 
-## Advertencias
+## Saved components
 
-- **Este proyecto no se ha podido compilar ni probar en el entorno donde se generó** (requiere las DLLs del juego y el toolchain). El código sigue fielmente los patrones de Platter y Find It, pero es esperable algún ajuste menor según la versión del juego: firmas de API como `NameSystem.GetRenderedLabelName`, componentes `Dropdown`/`DropdownItem` de `cs2/ui`, u opciones de `Colossal.Json`. Los errores de compilación, si aparecen, serán puntuales y fáciles de corregir con el toolchain delante.
-- Cambiar `ModId` en `PublishConfiguration.xml` (ahora 0) al publicar.
+Stored in the city save, all versioned `ISerializable`:
 
-## Posibles mejoras futuras
+- `HandPlaced { m_ZoneHash }`: buildings placed by hand.
+- `LevelSkipProgress`: buildings saving up for a skip.
+- `CustomZoneSaveTag` / `CustomZoneIndexEntry`: obsolete, read only.
 
-- Herramienta de área propia (polígonos independientes) en lugar de reutilizar distritos.
-- Mitigación del "churn" de spawns rechazados (p. ej. cooldown por celda).
-- Importar/exportar paletas para compartirlas.
+The zone cells themselves are ordinary game zone cells pointing at the custom zone prefabs.
 
-## Créditos
+## Compatibility notes
 
-- **Platter** (lucarager, MIT) — patrón de sistemas de filtrado de spawn, ValueBindingHelper, GenericUIWriter/Reader.
-- **Find It** (JadHajjar, MIT) — indexado de prefabs, filtros, estructura de UI y build.
-- **Unified Icon Library** (algernon) y **Asset Icon Library** (JadHajjar) — iconografía.
+- **Do not combine with mods that replace `ZoneSpawnSystem` or `ZoneCheckSystem`** (other custom zoning mods): only one of them can own those systems.
+- **Plop the Growables:** compatible. Its "never condemn" rule takes precedence for buildings placed by hand.
+- **Find It and other placement tools:** buildings they place are tagged as placed by hand.
+- **Building Icon Generator:** optional, through reflection (`BuildingIconGenerator.Api.BuildingIcons`). Without it, the fallback renderer is used.
+- **Removing the mod:** delete the custom zones in each city first (the panel unzones their cells), otherwise the cells point at zone prefabs that no longer exist.
+
+## Building from source
+
+- **Requirements:** Visual Studio 2022, the Cities: Skylines II modding toolchain (installed from the game's options, sets `CSII_TOOLPATH`) and Node.js.
+- **Build:** open `CustomZones.sln` and build the `CustomZones` project. The toolchain copies the mod to the local Mods folder. The UI is built by the project; for UI-only work run `npm install` and `npm run build` in `CustomZones/UI`.
+- **Publish:** Visual Studio, Publish, with the toolchain's profiles (`PublishNewMod` once, then `PublishNewVersion`). The page text comes from `Properties/PublishConfiguration.xml`, which holds a copy of `DESCRIPTION.md`.
+
+## Logs and bug reports
+
+- The mod logs to `Logs/CustomZones.log` next to the game's other logs: zone creation, building wiring (`PopulateAllowedBuffers`), every level-up decision, cancelled material requests, skip rounds and spawn timing.
+- UI errors appear in `Logs/UI.log`.
+- Please attach `CustomZones.log` to bug reports, with the steps that led to the problem.

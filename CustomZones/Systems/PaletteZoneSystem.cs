@@ -62,7 +62,7 @@ namespace CustomZones.Systems
         public const string ClonePrefix = "CZ_";
 
         private const string CategoryName = "CZ_PaletteCategory";
-        private const string CategoryIcon = CustomZones.Utilities.ZoneIcons.CategoryIcon;
+        private static string CategoryIcon => CustomZones.Utilities.ZoneIcons.CategoryIcon;
 
         /// <summary>Light-pink fill all palette zones use.</summary>
         private static readonly Color PaletteColor = new(1f, 0.72f, 0.85f, 1f);
@@ -84,6 +84,9 @@ namespace CustomZones.Systems
         private readonly Dictionary<string, string> m_LocaleEntries = new();
 
         private EntityArchetype m_UnlockEventArchetype;
+
+        // Zone blocks of the city (to unzone a deleted custom zone's cells).
+        private EntityQuery m_BlockQuery;
         private Entity m_RefreshEventEntity = Entity.Null;
 
         /// <summary>Frames left before the pending toolbar refresh is sent (-1 = none pending).</summary>
@@ -107,6 +110,12 @@ namespace CustomZones.Systems
             m_UnlockEventArchetype = EntityManager.CreateArchetype(
                 ComponentType.ReadWrite<global::Game.Common.Event>(),
                 ComponentType.ReadWrite<Unlock>());
+
+            m_BlockQuery = GetEntityQuery(new EntityQueryDesc
+            {
+                All = new[] { ComponentType.ReadOnly<Game.Zones.Block>(), ComponentType.ReadWrite<Game.Zones.Cell>() },
+                None = new[] { ComponentType.ReadOnly<Game.Common.Deleted>(), ComponentType.ReadOnly<Game.Tools.Temp>() },
+            });
         }
 
         // ------------------------------------------------------------------
@@ -166,6 +175,62 @@ namespace CustomZones.Systems
 
             UpdateToolbarRefresh();
 
+            if ((++m_LinkCheckFrame & 63) == 0)
+            {
+                EnsureToolbarLinks();
+            }
+        }
+
+        private int m_LinkCheckFrame;
+        private Entity m_ZonesMenu;
+
+        /// <summary>
+        /// The toolbar keeps its asset menu open while the tool's prefab belongs to a
+        /// category of that menu (ToolbarUISystem.SelectAsset reads the prefab's
+        /// UIObjectData.m_Group and that category's UIAssetCategoryData.m_Menu). Custom
+        /// zones created by the mod can miss either link, and then picking one closes
+        /// the menu: put them right.
+        /// </summary>
+        private void EnsureToolbarLinks()
+        {
+            if (m_Category == null || !m_PrefabSystem.TryGetEntity(m_Category, out var categoryEntity))
+            {
+                return;
+            }
+
+            if (m_ZonesMenu == Entity.Null && m_Category.m_Menu != null && m_PrefabSystem.TryGetEntity(m_Category.m_Menu, out var menuEntity))
+            {
+                m_ZonesMenu = menuEntity;
+            }
+
+            if (m_ZonesMenu != Entity.Null &&
+                EntityManager.TryGetComponent<UIAssetCategoryData>(categoryEntity, out var categoryData) &&
+                categoryData.m_Menu != m_ZonesMenu)
+            {
+                categoryData.m_Menu = m_ZonesMenu;
+                EntityManager.SetComponentData(categoryEntity, categoryData);
+                Mod.Log.Info("Toolbar: linked the Custom Zones category to the zoning menu.");
+            }
+
+            foreach (var kv in m_PaletteZones)
+            {
+                if (m_HiddenZones.Contains(kv.Key) ||
+                    !m_PrefabSystem.TryGetEntity(kv.Value, out var zoneEntity) ||
+                    !EntityManager.TryGetComponent<UIObjectData>(zoneEntity, out var uiData) ||
+                    uiData.m_Group == categoryEntity)
+                {
+                    continue;
+                }
+
+                uiData.m_Group = categoryEntity;
+                EntityManager.SetComponentData(zoneEntity, uiData);
+                if (!IsInCategory(categoryEntity, zoneEntity))
+                {
+                    m_Category.AddElement(EntityManager, zoneEntity);
+                }
+
+                Mod.Log.Info($"Toolbar: linked zone '{kv.Value.name}' to the Custom Zones category (its menu stays open while painting).");
+            }
         }
 
         // ------------------------------------------------------------------
@@ -285,6 +350,87 @@ namespace CustomZones.Systems
 
             m_HiddenZones.Add(paletteId);
             Mod.Log.Info($"Toolbar: removed the button of deleted palette zone '{zone.name}'.");
+
+            if (EntityManager.TryGetComponent<ZoneData>(zoneEntity, out var zoneData))
+            {
+                UnzoneCells(zoneData.m_ZoneType.m_Index, zone.name);
+            }
+        }
+
+        /// <summary>Painted cells of a custom zone in the city (0 when it has none or no zone yet).</summary>
+        public int CountPaintedCells(string paletteId)
+        {
+            if (!m_PaletteZones.TryGetValue(paletteId, out var zone) ||
+                !m_PrefabSystem.TryGetEntity(zone, out var zoneEntity) ||
+                !EntityManager.TryGetComponent<ZoneData>(zoneEntity, out var zoneData) ||
+                zoneData.m_ZoneType.m_Index == 0)
+            {
+                return 0;
+            }
+
+            var count = 0;
+            using (var entities = m_BlockQuery.ToEntityArray(Unity.Collections.Allocator.Temp))
+            {
+                foreach (var block in entities)
+                {
+                    var buffer = EntityManager.GetBuffer<Game.Zones.Cell>(block, true);
+                    for (var i = 0; i < buffer.Length; i++)
+                    {
+                        if (buffer[i].m_Zone.m_Index == zoneData.m_ZoneType.m_Index)
+                        {
+                            count++;
+                        }
+                    }
+                }
+            }
+
+            return count;
+        }
+
+        /// <summary>
+        /// A deleted custom zone leaves the map like erased zoning does in the base
+        /// game: its cells become unzoned, and the zone check then treats the
+        /// buildings on them exactly as it treats buildings whose zone was erased.
+        /// </summary>
+        private void UnzoneCells(ushort zoneIndex, string zoneName)
+        {
+            if (zoneIndex == 0)
+            {
+                return;
+            }
+
+            var cells = 0;
+            var blocks = 0;
+            using (var entities = m_BlockQuery.ToEntityArray(Unity.Collections.Allocator.Temp))
+            {
+                foreach (var block in entities)
+                {
+                    var buffer = EntityManager.GetBuffer<Game.Zones.Cell>(block);
+                    var changed = false;
+                    for (var i = 0; i < buffer.Length; i++)
+                    {
+                        var cell = buffer[i];
+                        if (cell.m_Zone.m_Index == zoneIndex)
+                        {
+                            cell.m_Zone = Game.Zones.ZoneType.None;
+                            buffer[i] = cell;
+                            changed = true;
+                            cells++;
+                        }
+                    }
+
+                    if (changed)
+                    {
+                        blocks++;
+                        if (!EntityManager.HasComponent<Game.Common.Updated>(block))
+                        {
+                            EntityManager.AddComponent<Game.Common.Updated>(block);
+                        }
+                    }
+                }
+            }
+
+            Mod.Log.Info($"Deleted zone '{zoneName}': {cells} painted cell(s) in {blocks} block(s) unzoned.");
         }
 
         /// <summary>Fill + edge colours of a zone from its "#rrggbb" colour (edge = a darker shade).</summary>
@@ -333,7 +479,7 @@ namespace CustomZones.Systems
                 var palette = PaletteStorage.Instance.GetById(kv.Key);
                 if (palette == null ||
                     (m_AppliedColors.TryGetValue(kv.Key, out var applied) &&
-                     string.Equals(applied, palette.Color, StringComparison.OrdinalIgnoreCase)))
+                     string.Equals(applied, AppliedKey(palette), StringComparison.OrdinalIgnoreCase)))
                 {
                     continue;
                 }
@@ -346,17 +492,26 @@ namespace CustomZones.Systems
                 var uiObject = zone.GetComponent<UIObject>();
                 if (uiObject != null && m_BaseZones.TryGetValue(kv.Key, out var baseZone))
                 {
-                    var baseIcon = baseZone.GetComponent<UIObject>()?.m_Icon;
-                    var icon = string.IsNullOrEmpty(baseIcon)
-                        ? null
-                        : CustomZones.Utilities.ZoneIcons.Create(zone.name, baseIcon, baseZone.m_Color, fill);
+                    string icon = null;
+                    if (TryParseGeneratedIcon(palette?.Icon, out _, out var models))
+                    {
+                        icon = CustomZones.Utilities.BuildingZoneIcon.Create(zone.name, models, fill);
+                    }
+
+                    if (icon == null)
+                    {
+                        ResolveIconSource(palette, baseZone, out var sourceIcon, out var sourceColor);
+                        icon = string.IsNullOrEmpty(sourceIcon)
+                            ? null
+                            : CustomZones.Utilities.ZoneIcons.Create(zone.name, sourceIcon, sourceColor, fill);
+                    }
                     if (icon != null)
                     {
                         uiObject.m_Icon = icon;
                     }
                 }
 
-                m_AppliedColors[kv.Key] = palette.Color;
+                m_AppliedColors[kv.Key] = AppliedKey(palette);
                 changed = true;
             }
 
@@ -378,8 +533,183 @@ namespace CustomZones.Systems
                 Mod.Log.Warn("Zone colours changed but ZoneSystem.m_UpdateColors was not found: they apply after a reload.");
             }
 
+            IconVersion++;
             RequestToolbarRefresh();
-            Mod.Log.Info("Applied changed zone colour(s).");
+            Mod.Log.Info("Applied changed zone colour(s) / icon(s).");
+        }
+
+        /// <summary>Bumped whenever a zone's toolbar icon is redrawn.</summary>
+        public int IconVersion { get; private set; }
+
+        /// <summary>What ApplyColorChanges last drew a zone with: colour and icon.</summary>
+        private static string AppliedKey(PaletteDefinition palette) =>
+            (palette.Color ?? string.Empty) + "|" + (palette.Icon ?? string.Empty);
+
+        /// <summary>game zone icon -> colour of the game zone that uses it (to recolour it).</summary>
+        private Dictionary<string, Color> m_IconSources;
+
+        /// <summary>Icons of the game's zones, in toolbar order (the icons a custom zone can use).</summary>
+        private List<string> m_IconOrder;
+
+        private void BuildIconSources()
+        {
+            if (m_IconSources != null)
+            {
+                return;
+            }
+
+            var sources = new Dictionary<string, Color>(StringComparer.OrdinalIgnoreCase);
+            var order = new List<(int group, int priority, string icon)>();
+            var prefabs = AllPrefabs();
+            if (prefabs != null)
+            {
+                foreach (var zone in prefabs.OfType<ZonePrefab>())
+                {
+                    if (zone.name == null || zone.name.StartsWith(ClonePrefix, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    var ui = zone.GetComponent<UIObject>();
+                    var icon = ui?.m_Icon;
+                    if (string.IsNullOrEmpty(icon) || !icon.EndsWith(".svg", StringComparison.OrdinalIgnoreCase) ||
+                        icon.IndexOf("://", StringComparison.Ordinal) >= 0 || sources.ContainsKey(icon))
+                    {
+                        continue;
+                    }
+
+                    sources[icon] = zone.m_Color;
+                    var group = zone.m_AreaType switch
+                    {
+                        Game.Zones.AreaType.Residential => 0,
+                        Game.Zones.AreaType.Commercial => 1,
+                        _ => zone.m_Office ? 3 : 2,
+                    };
+                    order.Add((group, ui.m_Priority, icon));
+                }
+            }
+
+            m_IconSources = sources;
+            m_IconOrder = order.OrderBy(o => o.group).ThenBy(o => o.priority).Select(o => o.icon).ToList();
+            Mod.Log.Info($"ZoneIcons: {m_IconOrder.Count} game zone icon(s) available for custom zones.");
+        }
+
+        /// <summary>
+        /// The colours of the game's own zones, offered first in the colour picker:
+        /// light / dark green (residential low / high), light / dark blue (commercial
+        /// low / high), yellow (industry), purple (offices).
+        /// </summary>
+        public string[] GetGameZoneColors()
+        {
+            var colors = new List<string>();
+            var prefabs = AllPrefabs();
+            if (prefabs != null)
+            {
+                var zones = prefabs.OfType<ZonePrefab>()
+                    .Where(z => z.name != null && !z.name.StartsWith(ClonePrefix, StringComparison.Ordinal) && !IsVariantZone(z.name))
+                    .Where(z => z.name.IndexOf("Mixed", StringComparison.OrdinalIgnoreCase) < 0)
+                    .ToList();
+
+                void Add(Game.Zones.AreaType area, bool office, string keyword)
+                {
+                    var zone = zones.FirstOrDefault(z => z.m_AreaType == area && z.m_Office == office &&
+                                                         (keyword == null || z.name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0))
+                               ?? zones.FirstOrDefault(z => z.m_AreaType == area && z.m_Office == office);
+                    if (zone == null)
+                    {
+                        return;
+                    }
+
+                    var hex = "#" + ColorUtility.ToHtmlStringRGB(zone.m_Color).ToLowerInvariant();
+                    if (!colors.Contains(hex))
+                    {
+                        colors.Add(hex);
+                    }
+                }
+
+                Add(Game.Zones.AreaType.Residential, false, "Low");
+                Add(Game.Zones.AreaType.Residential, false, "High");
+                Add(Game.Zones.AreaType.Commercial, false, "Low");
+                Add(Game.Zones.AreaType.Commercial, false, "High");
+                Add(Game.Zones.AreaType.Industrial, false, null);
+                Add(Game.Zones.AreaType.Industrial, true, null);
+            }
+
+            return colors.Count > 0 ? colors.ToArray() : ZoneColors.Choices;
+        }
+
+        /// <summary>Icons of the game's zones a custom zone can be drawn with.</summary>
+        public string[] GetIconChoices()
+        {
+            BuildIconSources();
+            return m_IconOrder.ToArray();
+        }
+
+        /// <summary>Icon value of a zone whose icon is drawn from one of its buildings.</summary>
+        public const string GeneratedIconPrefix = "gen:";
+
+        /// <summary>
+        /// Icon value of a drawn icon: "gen:seed|building;building;..." (see
+        /// BuildingZoneIcon.Write), so it can be redrawn in a new colour without the buildings.
+        /// </summary>
+        public static string GeneratedIconValue(int seed, IEnumerable<CustomZones.Utilities.BuildingZoneIcon.Model> buildings) =>
+            GeneratedIconPrefix + seed.ToString(System.Globalization.CultureInfo.InvariantCulture) + "|" +
+            string.Join(";", buildings.Select(CustomZones.Utilities.BuildingZoneIcon.Write));
+
+        /// <summary>Reads a value written by <see cref="GeneratedIconValue"/>.</summary>
+        public static bool TryParseGeneratedIcon(string value, out int seed, out List<CustomZones.Utilities.BuildingZoneIcon.Model> buildings)
+        {
+            seed = -1;
+            buildings = new List<CustomZones.Utilities.BuildingZoneIcon.Model>();
+            if (value == null || !value.StartsWith(GeneratedIconPrefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            var parts = value.Substring(GeneratedIconPrefix.Length).Split('|');
+            if (parts.Length != 2 ||
+                !int.TryParse(parts[0], System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out seed))
+            {
+                seed = -1;
+                return false;
+            }
+
+            foreach (var text in parts[1].Split(';'))
+            {
+                if (CustomZones.Utilities.BuildingZoneIcon.TryRead(text, out var model))
+                {
+                    buildings.Add(model);
+                }
+            }
+
+            return buildings.Count > 0;
+        }
+
+        // Icon value of a test build that retouched game icons: "svg:baseIcon|...".
+        // Only its game icon is still used.
+        private const string LegacyRetouchedPrefix = "svg:";
+
+        /// <summary>The game icon a zone's icon is drawn from, and that icon's own zone colour.</summary>
+        private void ResolveIconSource(PaletteDefinition palette, ZonePrefab baseZone, out string icon, out Color color)
+        {
+            var chosen = palette?.Icon;
+            if (chosen != null && chosen.StartsWith(LegacyRetouchedPrefix, StringComparison.Ordinal))
+            {
+                chosen = chosen.Substring(LegacyRetouchedPrefix.Length).Split('|')[0];
+            }
+
+            if (!string.IsNullOrEmpty(chosen))
+            {
+                BuildIconSources();
+                if (m_IconSources.TryGetValue(chosen, out color))
+                {
+                    icon = chosen;
+                    return;
+                }
+            }
+
+            icon = baseZone?.GetComponent<UIObject>()?.m_Icon;
+            color = baseZone != null ? baseZone.m_Color : default;
         }
 
         /// <summary>Toolbar icon of a custom zone (for the editor's zone list).</summary>
@@ -463,7 +793,16 @@ namespace CustomZones.Systems
                 }
 
                 m_PaletteZones[palette.Id] = zone;
-                m_AppliedColors[palette.Id] = palette.Color;
+                if (string.IsNullOrEmpty(palette.Icon))
+                {
+                    m_AppliedColors[palette.Id] = AppliedKey(palette);
+                }
+                else
+                {
+                    // Built with the base zone's icon: redraw it with the chosen one.
+                    m_AppliedColors[palette.Id] = string.Empty;
+                    m_AppliedColorVersion = -1;
+                }
 
                 var baseZone = FindBaseZone(palette.Category, palette.Density);
                 if (baseZone != null)
@@ -709,7 +1048,28 @@ namespace CustomZones.Systems
 
             // Residential density preference (drives the demand bucket via the
             // copied ZonePropertiesData). Others: density is a single pool.
-            if (wantArea == Game.Zones.AreaType.Residential && density != DensityType.Any)
+            // The plain game zones first (no old town / waterfront / low rent variants).
+            candidates = candidates
+                .OrderBy(z => IsVariantZone(z.name) ? 1 : 0)
+                .ToList();
+
+            if (category == ZoneCategory.Mixed)
+            {
+                var mixed = candidates.FirstOrDefault(z => z.name.IndexOf("Mixed", StringComparison.OrdinalIgnoreCase) >= 0);
+                if (mixed != null)
+                {
+                    return mixed;
+                }
+            }
+            else if (wantArea == Game.Zones.AreaType.Residential)
+            {
+                // Plain residential: not the mixed zone.
+                candidates = candidates
+                    .OrderBy(z => z.name.IndexOf("Mixed", StringComparison.OrdinalIgnoreCase) >= 0 ? 1 : 0)
+                    .ToList();
+            }
+
+            if (wantArea == Game.Zones.AreaType.Residential && category != ZoneCategory.Mixed && density != DensityType.Any)
             {
                 var keyword = density switch
                 {
@@ -722,8 +1082,11 @@ namespace CustomZones.Systems
 
                 if (keyword != null)
                 {
+                    // "Medium" must not pick the medium row-housing zone.
                     var match = candidates.FirstOrDefault(z =>
-                        z.name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0);
+                        z.name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0 &&
+                        z.name.IndexOf("Mixed", StringComparison.OrdinalIgnoreCase) < 0 &&
+                        (density == DensityType.Row || z.name.IndexOf("Row", StringComparison.OrdinalIgnoreCase) < 0));
                     if (match != null)
                     {
                         return match;
@@ -733,6 +1096,13 @@ namespace CustomZones.Systems
 
             return candidates[0];
         }
+
+        private static bool IsVariantZone(string name) =>
+            name.IndexOf("OldTown", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            name.IndexOf("Old Town", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            name.IndexOf("Waterfront", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            name.IndexOf("LowRent", StringComparison.OrdinalIgnoreCase) >= 0 ||
+            name.IndexOf("Low Rent", StringComparison.OrdinalIgnoreCase) >= 0;
 
         // ------------------------------------------------------------------
         // Whitelist -> PaletteAllowedBuilding buffer sync (consumed by the
@@ -797,11 +1167,13 @@ namespace CustomZones.Systems
                     continue; // deleted palette -> leave the buffer empty
                 }
 
-                // Every chosen building (family at a level): those are the prefabs
-                // that may be born on this zone's empty lots, at that level.
-                foreach (var selection in palette.Families)
+                // The chosen buildings that may be born on this zone's empty lots: the
+                // level-1 ones like in the game or, when the zone skips levels, each
+                // design at its lowest ticked level.
+                foreach (var selection in BuildingFamilies.BornSelections(palette, (key, level) => m_IndexSystem.FamiliesByKey.TryGetValue(key, out var f) && f.MemberAt(level) != null))
                 {
                     BuildingFamilies.ParseSelection(selection, out var familyKey, out var level);
+
                     var entry = m_IndexSystem.FamiliesByKey.TryGetValue(familyKey, out var family)
                         ? family.MemberAt(level)
                         : null;

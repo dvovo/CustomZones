@@ -20,3 +20,18 @@ export const gameDropdownTheme: any = getModule(
   "game-ui/game/themes/game-dropdown.module.scss",
   "classes"
 );
+
+/**
+ * Vanilla colour field: a swatch that opens the game's colour picker (props:
+ * value {r,g,b,a} 0..1, onChange(color), colorWheel, hexInput, popupDirection).
+ */
+export const ColorField: any = getModule(
+  "game-ui/common/input/color-picker/color-field/color-field.tsx",
+  "ColorField"
+);
+
+/** Vanilla slider (props: value, start, end, onChange(value), valueTransformer, className). */
+export const Slider: any = getModule("game-ui/common/input/slider/slider.tsx", "Slider");
+
+/** Rounds slider values to whole numbers. */
+export const intTransformer: any = getModule("game-ui/common/input/slider/slider.tsx", "intTransformer");

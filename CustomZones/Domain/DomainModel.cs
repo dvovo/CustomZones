@@ -28,6 +28,23 @@ namespace CustomZones.Domain
     /// <summary>
     /// Density classification, mirroring FindIt's ZoneTypeFilter.
     /// </summary>
+    /// <summary>How the buildings of a custom zone are born and level up.</summary>
+    public enum GrowthMode
+    {
+        /// <summary>
+        /// Like the game: born at level 1, then up one level at a time into a
+        /// building ticked for the next level (its own design first with "keep design").
+        /// </summary>
+        LikeGame = 0,
+
+        /// <summary>
+        /// Each building keeps its design: born at the design's lowest ticked level
+        /// and up to its next ticked level, skipping the others. A skipped level
+        /// still takes the time it takes in the game (see LevelSkipProgress).
+        /// </summary>
+        SkipLevels = 1,
+    }
+
     public enum DensityType
     {
         Any = 0,
@@ -64,6 +81,9 @@ namespace CustomZones.Domain
 
         /// <summary>Lot size in cells (width, depth) from BuildingData.m_LotSize.</summary>
         public int2 LotSize;
+
+        /// <summary>Height of the building in metres (ObjectGeometryData; 0 = unknown).</summary>
+        public float Height;
 
         /// <summary>
         /// Names of the asset packs (region packs UK/JP/... via AssetPackItem)
@@ -127,19 +147,33 @@ namespace CustomZones.Domain
         public DensityType Density = DensityType.Low;
 
         /// <summary>
-        /// The buildings that may be born in this zone: one entry per family and
-        /// level ("EU_ResidentialLow01|3x2@3", see BuildingFamilies.SelectionKey).
+        /// The buildings of this zone: one entry per family and level
+        /// ("EU_ResidentialLow01|3x2@3", see BuildingFamilies.SelectionKey). Level 1
+        /// entries may be born; higher ones are what buildings may level up to (and
+        /// are born first when the zone uses <see cref="GrowthMode.SkipLevels"/>).
         /// </summary>
         public HashSet<string> Families = new();
 
         /// <summary>Buildings in this zone may level up (false = they keep their level).</summary>
         public bool LevelUp = true;
 
-        /// <summary>When levelling up, only become the next level of the same building (same design).</summary>
+        /// <summary>
+        /// When levelling up, prefer the next level of the same design (when it is
+        /// ticked); otherwise another ticked building of the next level.
+        /// </summary>
         public bool KeepDesign = true;
+
+        /// <summary>How new buildings are born in this zone.</summary>
+        public GrowthMode Growth = GrowthMode.LikeGame;
 
         /// <summary>Zone colour as "#rrggbb" (empty = pick a default).</summary>
         public string Color = string.Empty;
+
+        /// <summary>
+        /// Game zone icon the toolbar icon is drawn from ("Media/Game/Icons/....svg",
+        /// recoloured to <see cref="Color"/>); empty = the icon of the zone it behaves like.
+        /// </summary>
+        public string Icon = string.Empty;
 
         /// <summary>Legacy (v0.1): individual prefab names. Migrated to <see cref="Families"/> on load.</summary>
         public HashSet<string> AllowedBuildings = new();

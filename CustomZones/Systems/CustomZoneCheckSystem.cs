@@ -36,13 +36,18 @@ namespace CustomZones.Systems
     /// Mod.OnLoad and this system takes its place. It is the same check, step by
     /// step (the game's own jobs find the buildings to check), with one rule
     /// added: a custom-zone cell also counts as the zone of the buildings in that
-    /// custom zone's catalog (any of their levels), when they are of the kind the
-    /// custom zone behaves like. Vanilla zones keep exactly the game's behaviour.
+    /// custom zone's catalog (any of their levels, any type). Vanilla zones keep exactly the game's behaviour.
     /// The jobs mirror the game's own (they are private in ZoneCheckSystem).
     /// <para>
     /// Editing a custom zone's catalog re-checks every building standing on a
     /// custom zone (debounced): buildings removed from the catalog are condemned,
     /// buildings added back are pardoned, like repainting the zone would do.
+    /// </para>
+    /// <para>
+    /// Buildings placed by hand (<see cref="HandPlaced"/>: the game's placement
+    /// tool, Find It...) are left alone while the zones under them stay the ones
+    /// they were placed on. When those zones change, the rules above apply to
+    /// them again, like to any other building.
     /// </para>
     /// </remarks>
     public partial class CustomZoneCheckSystem : GameSystemBase
@@ -212,6 +217,7 @@ namespace CustomZones.Systems
             return new CheckBuildingZonesJob
             {
                 m_CondemnedData = GetComponentLookup<Condemned>(true),
+                m_HandPlacedData = GetComponentLookup<HandPlaced>(true),
                 m_BlockData = GetComponentLookup<Block>(true),
                 m_ValidAreaData = GetComponentLookup<ValidArea>(true),
                 m_DestroyedData = GetComponentLookup<Destroyed>(true),
@@ -231,6 +237,7 @@ namespace CustomZones.Systems
                 m_SearchTree = m_ZoneSearchSystem.GetSearchTree(true, out zoneTreeDependency),
                 m_EditorMode = m_ToolSystem.actionMode.IsEditor(),
                 m_OnlyCustomZones = onlyCustomZones,
+                m_KeepHandPlaced = Mod.Settings?.KeepHandPlacedBuildings ?? true,
                 m_Equivalent = m_Equivalent,
                 m_Allowed = m_Allowed,
                 m_CustomZones = m_CustomZones,
@@ -423,6 +430,7 @@ namespace CustomZones.Systems
         private struct CheckBuildingZonesJob : IJobParallelForDefer
         {
             [ReadOnly] public ComponentLookup<Condemned> m_CondemnedData;
+            [ReadOnly] public ComponentLookup<HandPlaced> m_HandPlacedData;
             [ReadOnly] public ComponentLookup<Block> m_BlockData;
             [ReadOnly] public ComponentLookup<ValidArea> m_ValidAreaData;
             [ReadOnly] public ComponentLookup<Destroyed> m_DestroyedData;
@@ -445,6 +453,7 @@ namespace CustomZones.Systems
             [ReadOnly] public NativeParallelHashSet<int> m_CustomZones;
             [ReadOnly] public bool m_EditorMode;
             [ReadOnly] public bool m_OnlyCustomZones;
+            [ReadOnly] public bool m_KeepHandPlaced;
             public IconCommandBuffer m_IconCommandBuffer;
             public EntityCommandBuffer.ParallelWriter m_CommandBuffer;
 
@@ -457,6 +466,19 @@ namespace CustomZones.Systems
                     m_PrefabSignatureBuildingData.HasComponent(prefabRef.m_Prefab))
                 {
                     return; // only growable buildings are zone-checked
+                }
+
+                if (m_KeepHandPlaced && m_HandPlacedData.TryGetComponent(building, out var handPlaced))
+                {
+                    var zoneHash = LotZones.Hash(m_TransformData[building], buildingData.m_LotSize, m_SearchTree, m_BlockData, m_ValidAreaData, m_Cells);
+                    if (zoneHash == handPlaced.m_ZoneHash)
+                    {
+                        return; // placed by hand and its zones are unchanged: kept as it is
+                    }
+
+                    // The zone under it changed: from now on the usual rules (and
+                    // these zones are the new reference).
+                    m_CommandBuffer.SetComponent(index, building, new HandPlaced { m_ZoneHash = zoneHash });
                 }
 
                 var touchesCustomZone = false;
@@ -634,9 +656,10 @@ namespace CustomZones.Systems
                         return false;
                     }
 
+                    // A custom zone accepts exactly the buildings of its catalog (any
+                    // level), whatever their own type: zones may mix types.
                     m_TouchesCustomZone = true;
-                    return m_Equivalent.Contains((cellZone.m_Index << 16) | m_ZoneType.m_Index) &&
-                           m_Allowed.Contains(((long)cellZone.m_Index << 32) | (uint)m_Prefab.Index);
+                    return m_Allowed.Contains(((long)cellZone.m_Index << 32) | (uint)m_Prefab.Index);
                 }
             }
         }
