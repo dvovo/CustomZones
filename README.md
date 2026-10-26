@@ -4,7 +4,7 @@
 
 A Cities: Skylines II code mod. It lets players create their own zone types and choose exactly which growable buildings may spawn and level up in each of them, while the game's demand, growth and economy rules stay in charge.
 
-> Strongly recommended: [Building Icon Generator](https://github.com/dvovo/BuildingIconGenerator), by the same author, for a real picture of every building in the browser.
+> Recommended, not required: [Building Icon Generator (BIG)](https://github.com/dvovo/BuildingIconGenerator), by the same author, for a real picture of every building in the browser.
 
 - **Status:** beta (`1.0.1-beta`), built against game version 1.6.2f1.
 - **Player guide:** [DESCRIPTION.md](DESCRIPTION.md) is the text of the Paradox Mods page and explains every option from the player's side. This README covers how the mod works.
@@ -54,7 +54,7 @@ Author: **dvovo** — [Paradox Mods](https://mods.paradoxplaza.com/authors/dvovo
 | `CustomZones/Prefab/` | `PaletteZonePrefab`, the runtime zone prefab type. |
 | `CustomZones/Components/` | `PaletteZoneMarker` and the `PaletteAllowedBuilding` buffer. |
 | `CustomZones/Systems/` | All ECS systems (below). |
-| `CustomZones/Integration/BigIcons.cs` | Reflection client for Building Icon Generator (no hard reference). |
+| `CustomZones/Integration/BigIcons.cs` | Reflection client for Building Icon Generator (BIG), with no hard reference. |
 | `CustomZones/Utilities/` | Zone icon recolouring and the icon designer renderer, UI binding helpers, locale loader. |
 | `CustomZones/Locale/*.json` | 12 languages. Missing keys fall back to `en-US`. |
 | `CustomZones/UI/` | React / TypeScript UI module (cs2 UI toolchain, webpack). |
@@ -88,7 +88,7 @@ Author: **dvovo** — [Paradox Mods](https://mods.paradoxplaza.com/authors/dvovo
 - **Selection key = family plus level**, `"<family>@<level>"`. A zone stores a set of these keys. Ticking a card adds every level the family has; the level pills toggle single keys.
 - **Level kinds** sent to the UI: `2` the family has a prefab at that level, `1` it has none but the game draws it with the level below, `0` nothing.
 - **Meshless prefabs** (for example some industrial storage lots that only place trees) are kept: they are valid spawnable buildings in the game.
-- **Pictures:** game icon (or Asset Icon Library), then a Building Icon Generator thumbnail, then the internal fallback renderer (grey untextured model), then the zone icon.
+- **Pictures:** game icon (or Asset Icon Library), then a BIG thumbnail, then the internal fallback renderer (grey untextured model), then the zone icon.
 
 ## Spawning
 
@@ -184,7 +184,7 @@ The zone cells themselves are ordinary game zone cells pointing at the custom zo
 - **Do not combine with mods that replace `ZoneSpawnSystem` or `ZoneCheckSystem`** (other custom zoning mods): only one of them can own those systems.
 - **Plop the Growables:** compatible. Its "never condemn" rule takes precedence for buildings placed by hand.
 - **Find It and other placement tools:** buildings they place are tagged as placed by hand.
-- **Building Icon Generator:** optional, through reflection (`BuildingIconGenerator.Api.BuildingIcons`). Without it, the fallback renderer is used.
+- **Building Icon Generator (BIG):** optional but recommended, through reflection (`BuildingIconGenerator.Api.BuildingIcons`). Without it, the fallback renderer is used.
 - **Removing the mod:** delete the custom zones in each city first (the panel unzones their cells), otherwise the cells point at zone prefabs that no longer exist.
 
 ## Building from source

@@ -6,6 +6,8 @@
 
 A custom zone is painted like any other zone and grows with the city's normal demand, but only the buildings you picked can appear in it. Want a street of red-brick row houses only, a farm belt without factories, or a downtown of glass towers? Make a zone for it.
 
+**Recommended (optional): Building Icon Generator (BIG)**, by the same author, so every building in the list shows a real picture. Search for it on Paradox Mods.
+
 ## Quick start
 1. Open the **zoning tool**. In the tool options, next to **Custom Zones**, click the button to open the panel.
 2. Click **New zone** and choose the game zone it behaves like: low, row, medium or high density residential, mixed housing, commercial, industrial or office.
@@ -86,8 +88,8 @@ Draw a zone icon in the style of the game's zone icons. Start from one of many m
 - **Open the exported zones folder.**
 - **Clear the icon library.**
 
-## Strongly recommended: Building Icon Generator
-Custom Zones works on its own, but **Building Icon Generator** (by the same author) gives every building in the list and in the large preview a real full colour picture. Without it, buildings the game has no icon for get a plain grey drawing.
+## Recommended: Building Icon Generator (BIG)
+BIG is not required: Custom Zones works on its own. But with **Building Icon Generator (BIG)**, by the same author, every building in the list and in the large preview gets a real full colour picture. Without BIG, buildings the game has no icon for get a plain grey drawing. Search for "Building Icon Generator" on Paradox Mods.
 
 ## Good to know
 - **Demand is never changed.** The mod only reads it. Buildings grow with the same rules as the game's own zones, so nothing grows when the city does not need it.
