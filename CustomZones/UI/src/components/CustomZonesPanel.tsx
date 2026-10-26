@@ -43,6 +43,7 @@ import {
   selectedZone$,
   setPanelVisible,
   setSelectedZone,
+  pickZone,
   setZoneColor,
   setZoneKeepDesign,
   setZoneGrowth,
@@ -153,13 +154,13 @@ export const CustomZonesPanel = () => {
             zones={zones}
             selectedId={selectedId}
             editingId={showEditor ? selectedId : ""}
-            onSelect={(id) => setSelectedZone(id)}
+            onSelect={(id) => pickZone(id)}
             onEdit={(id) => {
               setCreating(false);
               if (id === selectedId && showEditor) {
                 setEditing(false);
               } else {
-                setSelectedZone(id);
+                pickZone(id);
                 setEditing(true);
               }
             }}

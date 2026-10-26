@@ -127,6 +127,7 @@ Made by dvovo (https://mods.paradoxplaza.com/authors/dvovo) with the help of AI.
 	<Screenshot Value="Properties/Screenshots/9.png" />
 	<Screenshot Value="Properties/Screenshots/10.png" />
 	<Screenshot Value="Properties/Screenshots/3.png" />
+	<Screenshot Value="Properties/Screenshots/4.png" />
 	<Screenshot Value="Properties/Screenshots/5.png" />
 	<Screenshot Value="Properties/Screenshots/6.png" />
 	<!--Tag, can be set multiple times-->
@@ -134,10 +135,11 @@ Made by dvovo (https://mods.paradoxplaza.com/authors/dvovo) with the help of AI.
 	<!--Forum thread shown as the Discussion section of the mod page-->
 	<ForumLink Value="https://forum.paradoxplaza.com/forum/threads/mod-beta-custom-zones-discussion-feedback.1947164/" />
 	<!--Version of the mod-->
-	<ModVersion Value="1.0.0-beta.1" />
+	<ModVersion Value="1.0.1-beta" />
 	<!--Recommended version of the base game to use the mod-->
 	<GameVersion Value="1.6.*" />
-	<ChangeLog>First beta release.</ChangeLog>
+	<ChangeLog>- Clicking a zone in the Custom Zones panel now also picks it in the zoning toolbar, so you can paint it straight away (picking a zone in the toolbar already selected it in the panel). A new or imported zone is picked as well.
+- Updated gallery pictures.</ChangeLog>
 	<!--GitHub button of the page-->
 	<ExternalLink Type="github" Url="https://github.com/dvovo/CustomZones" />
 	<!--Private while testing; set to Public for the public release-->

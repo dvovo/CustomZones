@@ -193,6 +193,8 @@ export const PACK_MOD = "__CZ_MOD__";
 
 export const setPanelVisible = (visible: boolean) => trigger(MOD_ID, "SetPanelVisible", visible);
 export const setSelectedZone = (id: string) => trigger(MOD_ID, "SetSelectedPalette", id);
+/** A zone clicked in the list: selected in the panel and picked in the zoning toolbar to paint. */
+export const pickZone = (id: string) => trigger(MOD_ID, "PickZone", id);
 
 export const createZone = (name: string, category: ZoneCategory, density: DensityType) =>
   trigger(MOD_ID, "CreatePalette", name, category, density);

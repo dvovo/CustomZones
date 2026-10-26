@@ -6,7 +6,7 @@ A Cities: Skylines II code mod. It lets players create their own zone types and 
 
 > Strongly recommended: [Building Icon Generator](https://github.com/dvovo/BuildingIconGenerator), by the same author, for a real picture of every building in the browser.
 
-- **Status:** beta (`1.0.0-beta.1`), built against game version 1.6.2f1.
+- **Status:** beta (`1.0.1-beta`), built against game version 1.6.2f1.
 - **Player guide:** [DESCRIPTION.md](DESCRIPTION.md) is the text of the Paradox Mods page and explains every option from the player's side. This README covers how the mod works.
 - **Bugs and ideas:** open an issue with the templates of this repository (please attach `CustomZones.log`), or post in the [forum thread](https://forum.paradoxplaza.com/forum/threads/mod-beta-custom-zones-discussion-feedback.1947164/), which is also the discussion of the mod's Paradox Mods page.
 - **Images:** the mod icon, thumbnail, banner and social image are in `Branding/`; the gallery is in `CustomZones/Properties/Screenshots/`.
@@ -153,7 +153,7 @@ Side effects are kept consistent with the game:
 - React / TypeScript under `CustomZones/UI/src`, bound with `cs2/api` (`bindValue` / `trigger`).
 - **Panel:** zone list, import / export, building browser with filters and search. The browser is virtualised: C# sends only the visible rows (`Families`, plus `FamilyCount`, `ScrollIndex`), and the large preview gets its own `PreviewFamily` binding so it stays current when its card is off screen.
 - **Zone window:** name, colour, icon chooser and designer, base zone, growth mode, level-up options, coverage warnings (`Coverage`: lot widths with no building, `NoBirth`, `Stops`), statistics (`ZoneStats`, refreshed every 5 s while open).
-- **Selecting a custom zone in the zoning toolbar selects it in the panel.**
+- **Panel and zoning toolbar stay in step:** a custom zone picked in the zoning toolbar is selected in the panel (`HandleToolSelection`), and a zone clicked in the panel, created or imported is picked in the toolbar (`PickZone` trigger, `PickPaintZone`: `ToolSystem.ActivatePrefabTool`, once the new zone has its zone type index).
 - Vanilla components (checkbox, dropdown, colour field) are imported through the game's module registry (`vanilla.ts`).
 
 ## Data files

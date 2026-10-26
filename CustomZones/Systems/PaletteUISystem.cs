@@ -111,6 +111,12 @@ namespace CustomZones.Systems
 
         private bool m_ZoneToolWasActive;
 
+        // A zone chosen in the panel, to be picked in the zoning toolbar as well, and
+        // the frames left to wait for it (a new zone gets its zone type a frame or two
+        // after it is created).
+        private string m_PaintPaletteId = string.Empty;
+        private int m_PaintWaitFrames;
+
         // "Place it in the city" from the large preview: the building handed to the
         // game's placement tool and the zone tool that was open. When the player
         // leaves the placement (Escape / right click), the zone tool, the panel and
@@ -187,6 +193,9 @@ namespace CustomZones.Systems
                 PushCoverage();
             });
 
+            // A zone clicked in the panel's list: also picked in the zoning toolbar.
+            CreateTrigger<string>("PickZone", SelectToPaint);
+
             m_ScrollIndex = CreateBinding("ScrollIndex", "SetScrollIndex", 0D, row =>
             {
                 m_ScrollRow = row;
@@ -241,7 +250,7 @@ namespace CustomZones.Systems
             CreateTrigger<string, int, int>("CreatePalette", (name, category, density) =>
             {
                 var palette = PaletteStorage.Instance.Create(name, (ZoneCategory)category, (DensityType)density);
-                Select(palette.Id);
+                SelectToPaint(palette.Id);
             });
 
             CreateTrigger<string, string>("RenamePalette",
@@ -305,7 +314,7 @@ namespace CustomZones.Systems
                 var zone = PaletteStorage.Instance.Import(file);
                 if (zone != null)
                 {
-                    Select(zone.Id);
+                    SelectToPaint(zone.Id);
                 }
             });
 
@@ -429,6 +438,7 @@ namespace CustomZones.Systems
             base.OnUpdate();
 
             HandlePlacingReturn();
+            PickPaintZone();
             HandleToolSelection();
 
             var selectedEntity = m_SelectedInfoSystem.selectedEntity;
@@ -576,6 +586,64 @@ namespace CustomZones.Systems
             m_ScrollRow = 0;
             MarkBrowserDirty();
             PushCoverage();
+        }
+
+        /// <summary>A zone the player chose in the panel: selected, and picked in the zoning toolbar to paint.</summary>
+        private void SelectToPaint(string id)
+        {
+            Select(id);
+            m_PaintPaletteId = m_SelectedPaletteId;
+            m_PaintWaitFrames = 120;
+        }
+
+        /// <summary>
+        /// While the zoning tool is open, picks the zone chosen in the panel in the
+        /// game's zoning toolbar, so the player can paint it straight away. (The other
+        /// way round, a zone picked in the toolbar is selected in the panel by
+        /// <see cref="HandleToolSelection"/>.)
+        /// </summary>
+        private void PickPaintZone()
+        {
+            if (m_PaintPaletteId.Length == 0)
+            {
+                return;
+            }
+
+            if (!(m_ToolSystem.activeTool is ZoneToolSystem) || m_PaintWaitFrames-- <= 0)
+            {
+                m_PaintPaletteId = string.Empty;
+                return;
+            }
+
+            if (!m_ZoneSystem.TryGetPaletteZone(m_PaintPaletteId, out var zone))
+            {
+                return; // not created yet
+            }
+
+            var paletteId = m_PaintPaletteId;
+            if (m_ToolSystem.activePrefab == zone)
+            {
+                m_PaintPaletteId = string.Empty;
+                return;
+            }
+
+            // Only once the game has given the zone its zone type (a new zone gets it
+            // a frame or two after it is created): before that it cannot be painted.
+            var prefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
+            if (!prefabSystem.TryGetEntity(zone, out var zoneEntity) ||
+                !EntityManager.HasComponent<ZoneData>(zoneEntity) ||
+                EntityManager.GetComponentData<ZoneData>(zoneEntity).m_ZoneType.m_Index == 0)
+            {
+                return;
+            }
+
+            m_PaintPaletteId = string.Empty;
+            if (m_ToolSystem.ActivatePrefabTool(zone))
+            {
+                // Already selected in the panel: HandleToolSelection must not select it again.
+                m_ActiveZonePalette.Value = paletteId;
+                m_ZoneToolWasActive = true;
+            }
         }
 
         /// <summary>
