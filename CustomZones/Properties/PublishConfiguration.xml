@@ -120,20 +120,21 @@ Made by dvovo (https://mods.paradoxplaza.com/authors/dvovo) with the help of AI.
 	<!--Thumbnail-->
 	<Thumbnail Value="Properties/Thumbnail.png" />
 	<!--Screenshot, can be set multiple times (Paradox Mods accepts 10 at most)-->
-	<Screenshot Value="Properties/Screenshots/1.png" />
-	<Screenshot Value="Properties/Screenshots/2.png" />
-	<Screenshot Value="Properties/Screenshots/11.png" />
-	<Screenshot Value="Properties/Screenshots/8.png" />
-	<Screenshot Value="Properties/Screenshots/9.png" />
-	<Screenshot Value="Properties/Screenshots/10.png" />
-	<Screenshot Value="Properties/Screenshots/3.png" />
-	<Screenshot Value="Properties/Screenshots/4.png" />
-	<Screenshot Value="Properties/Screenshots/5.png" />
-	<Screenshot Value="Properties/Screenshots/6.png" />
+	<Screenshot Value="Properties/Screenshots/cz_01_cover.png" />
+	<Screenshot Value="Properties/Screenshots/cz_02_preview.png" />
+	<Screenshot Value="Properties/Screenshots/cz_03_card_guide.png" />
+	<Screenshot Value="Properties/Screenshots/cz_04_two_ways.png" />
+	<Screenshot Value="Properties/Screenshots/cz_05_same_design.png" />
+	<Screenshot Value="Properties/Screenshots/cz_06_level_buttons.png" />
+	<Screenshot Value="Properties/Screenshots/cz_07_paint.png" />
+	<Screenshot Value="Properties/Screenshots/cz_08_zone_window.png" />
+	<Screenshot Value="Properties/Screenshots/cz_09_icon_designer.png" />
+	<Screenshot Value="Properties/Screenshots/cz_10_icon_showcase.png" />
 	<!--Tag, can be set multiple times-->
 	<Tag Value="Code Mod" />
-	<!--Forum thread shown as the Discussion section of the mod page-->
-	<ForumLink Value="https://forum.paradoxplaza.com/forum/threads/mod-beta-custom-zones-discussion-feedback.1947164/" />
+	<!--Forum thread of the mod. Paradox Mods answers "Game is not found" when it is sent from here,
+	    so it is set in the page editor instead (Metadata > Forum link).
+	<ForumLink Value="https://forum.paradoxplaza.com/forum/threads/mod-beta-custom-zones-discussion-feedback.1947164/" />-->
 	<!--Version of the mod-->
 	<ModVersion Value="1.0.1-beta" />
 	<!--Recommended version of the base game to use the mod-->

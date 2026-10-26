@@ -17,8 +17,8 @@ Author: **dvovo** — [Paradox Mods](https://mods.paradoxplaza.com/authors/dvovo
 
 | | |
 | --- | --- |
-| ![Reading a building card](CustomZones/Properties/Screenshots/11.png) | ![Two ways to grow](CustomZones/Properties/Screenshots/8.png) |
-| ![Prefer same design](CustomZones/Properties/Screenshots/9.png) | ![Level buttons](CustomZones/Properties/Screenshots/10.png) |
+| ![Reading a building card](CustomZones/Properties/Screenshots/cz_03_card_guide.png) | ![Two ways to grow](CustomZones/Properties/Screenshots/cz_04_two_ways.png) |
+| ![Prefer same design](CustomZones/Properties/Screenshots/cz_05_same_design.png) | ![Level buttons](CustomZones/Properties/Screenshots/cz_06_level_buttons.png) |
 
 ## Contents
 
